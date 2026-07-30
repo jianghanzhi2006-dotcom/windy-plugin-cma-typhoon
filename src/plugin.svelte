@@ -11,10 +11,11 @@
     
     <div style="padding: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #ffffff;">
         <div style="background: rgba(24, 144, 255, 0.15); border-left: 4px solid #1890ff; padding: 10px; margin-bottom: 12px; border-radius: 4px;">
-            <strong style="color: #40a9ff; font-size: 14px;">🌀 CMA Typhoon Tracker | 中央气象台台风追踪</strong>
+            <strong style="color: #40a9ff; font-size: 14px;">🌀 中央气象台 (CMA) 实时与预报路径</strong>
             <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">
-                Data Source: China Meteorological Administration (typhoon.nmc.cn)<br/>
-                Scale: Beaufort 1~17 | 🔴 Track / 实况 🟡 120h Forecast / 预测
+                数据来源：CMA 官方接口 (typhoon.nmc.cn)<br/>
+                风力标准：蒲氏 17 级 (2分钟平均风速)<br/>
+                轨迹说明：🔴 红色实线 (实况) | 🟡 金色虚线 (120h预测)
             </p>
         </div>
 
@@ -26,23 +27,23 @@
             on:click={ fetchCMATyphoonLive } 
             style="width: 100%; padding: 10px; background: #1890ff; color: #ffffff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-shadow: 0 1px 2px rgba(0,0,0,0.5);"
         >
-            📡 刷新 CMA 实时数据 | Refresh Live Data
+            📡 刷新中央气象台实时数据
         </button>
 
         {#if typhoonListInfo.length > 0}
             <div style="margin-top: 15px;">
-                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ffffff; font-weight: bold;">🌀 Live Typhoons | 活跃台风列表：</h4>
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ffffff; font-weight: bold;">🌀 台风历史实况演变（最新在顶部）：</h4>
                 {#each typhoonListInfo as item}
                     <div style="background: #1e1e1e; border-radius: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid #3a3a3a; box-shadow: 0 2px 6px rgba(0,0,0,0.4);">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 6px;">
                             <strong style="color: #69c0ff; font-size: 15px;">🌀 {item.no} {item.nameCn} ({item.nameEn})</strong>
-                            <span style="background: {item.status === 'Active / 进行中' ? '#275017' : '#434343'}; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;">
+                            <span style="background: {item.status === '进行中' ? '#275017' : '#434343'}; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;">
                                 ● {item.status}
                             </span>
                         </div>
 
                         <div style="margin-top: 8px;">
-                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 8px; font-weight: bold;">📜 Track Points | 历史实况轨迹 (Click to fly):</div>
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 8px; font-weight: bold;">📜 全程风力演变轨迹（最新在顶部，点击直达）：</div>
                             <div style="max-height: 520px; overflow-y: auto; padding-right: 4px;">
                                 {#each item.historyPoints as pt, idx}
                                     <div 
@@ -51,14 +52,14 @@
                                     >
                                         <div style="display: flex; align-items: center; gap: 6px;">
                                             {#if idx === 0}
-                                                <span style="background: #1890ff; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: bold;">Latest / 最新</span>
+                                                <span style="background: #1890ff; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: bold;">最新实况</span>
                                             {/if}
                                             <span style="color: #ffffff; font-weight: {idx === 0 ? 'bold' : 'normal'};">🕒 {pt.formatTime}</span>
                                         </div>
 
                                         <div style="display: flex; align-items: center; gap: 10px;">
                                             <span style="color: #aaa; font-size: 12px;">{pt.pressure} hPa</span>
-                                            <span style="background: {pt.bft.color}; color: {pt.bft.textColor}; padding: 3px 10px; border-radius: 4px; font-weight: bold; text-shadow: {pt.bft.textColor === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.8)' : 'none'}; min-width: 110px; text-align: center;">
+                                            <span style="background: {pt.bft.color}; color: {pt.bft.textColor}; padding: 3px 10px; border-radius: 4px; font-weight: bold; text-shadow: {pt.bft.textColor === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.8)' : 'none'}; min-width: 100px; text-align: center;">
                                                 {pt.bft.text} ({pt.speedMs}m/s)
                                             </span>
                                         </div>
@@ -81,29 +82,29 @@
 
     const { title } = config;
 
-    let statusText = 'Click button to fetch CMA typhoon data / 点击发起中央气象台请求...';
+    let statusText = '点击上方按钮发起中央气象台实时联网请求...';
     let typhoonListInfo: Array<any> = [];
     let layerGroup: any = null;
 
     function getBeaufort(ms: number) {
-        if (ms < 0.3) return { text: "0级 / Calm", color: "#E8E8E8", textColor: "#000000" };
-        if (ms <= 1.5) return { text: "1级 / Light Air", color: "#B5F5EC", textColor: "#000000" };
-        if (ms <= 3.3) return { text: "2级 / Light Breeze", color: "#87E8DE", textColor: "#000000" };
-        if (ms <= 5.4) return { text: "3级 / Gentle Breeze", color: "#5CDBD3", textColor: "#000000" };
-        if (ms <= 7.9) return { text: "4级 / Moderate Breeze", color: "#95DE64", textColor: "#000000" };
-        if (ms <= 10.7) return { text: "5级 / Fresh Breeze", color: "#73D13D", textColor: "#000000" };
-        if (ms <= 13.8) return { text: "6级 / Strong Breeze", color: "#389E0D", textColor: "#FFFFFF" };
-        if (ms <= 17.1) return { text: "7级 / High Wind", color: "#FADB14", textColor: "#000000" };
-        if (ms <= 20.7) return { text: "8级 / TD (8级低压)", color: "#FA8C16", textColor: "#FFFFFF" };
-        if (ms <= 24.4) return { text: "9级 / TS (9级风暴)", color: "#ED571A", textColor: "#FFFFFF" };
-        if (ms <= 28.4) return { text: "10级 / STS (强热带风暴)", color: "#CF1322", textColor: "#FFFFFF" };
-        if (ms <= 32.6) return { text: "11级 / Violent Storm", color: "#A8071A", textColor: "#FFFFFF" };
-        if (ms <= 36.9) return { text: "12级 / TY (12级台风)", color: "#C41D7F", textColor: "#FFFFFF" };
-        if (ms <= 41.4) return { text: "13级 / TY (13级台风)", color: "#9E1068", textColor: "#FFFFFF" };
-        if (ms <= 46.1) return { text: "14级 / STY (强台风)", color: "#722ED1", textColor: "#FFFFFF" };
-        if (ms <= 50.9) return { text: "15级 / STY (15级强台风)", color: "#531DAB", textColor: "#FFFFFF" };
-        if (ms <= 56.0) return { text: "16级 / SuperTY (超强台风)", color: "#391085", textColor: "#FFFFFF" };
-        return { text: "17级+ / SuperTY (17级超强台风)", color: "#120338", textColor: "#FFFFFF" };
+        if (ms < 0.3) return { text: "0级无风", color: "#E8E8E8", textColor: "#000000" };
+        if (ms <= 1.5) return { text: "1级软风", color: "#B5F5EC", textColor: "#000000" };
+        if (ms <= 3.3) return { text: "2级轻风", color: "#87E8DE", textColor: "#000000" };
+        if (ms <= 5.4) return { text: "3级微风", color: "#5CDBD3", textColor: "#000000" };
+        if (ms <= 7.9) return { text: "4级和风", color: "#95DE64", textColor: "#000000" };
+        if (ms <= 10.7) return { text: "5级清风", color: "#73D13D", textColor: "#000000" };
+        if (ms <= 13.8) return { text: "6级强风", color: "#389E0D", textColor: "#FFFFFF" };
+        if (ms <= 17.1) return { text: "7级劲风", color: "#FADB14", textColor: "#000000" };
+        if (ms <= 20.7) return { text: "8级热带低压", color: "#FA8C16", textColor: "#FFFFFF" };
+        if (ms <= 24.4) return { text: "9级热带风暴", color: "#ED571A", textColor: "#FFFFFF" };
+        if (ms <= 28.4) return { text: "10级强热带风暴", color: "#CF1322", textColor: "#FFFFFF" };
+        if (ms <= 32.6) return { text: "11级暴风", color: "#A8071A", textColor: "#FFFFFF" };
+        if (ms <= 36.9) return { text: "12级台风", color: "#C41D7F", textColor: "#FFFFFF" };
+        if (ms <= 41.4) return { text: "13级台风", color: "#9E1068", textColor: "#FFFFFF" };
+        if (ms <= 46.1) return { text: "14级强台风", color: "#722ED1", textColor: "#FFFFFF" };
+        if (ms <= 50.9) return { text: "15级强台风", color: "#531DAB", textColor: "#FFFFFF" };
+        if (ms <= 56.0) return { text: "16级超强台风", color: "#391085", textColor: "#FFFFFF" };
+        return { text: "17级及以上超强台风", color: "#120338", textColor: "#FFFFFF" };
     }
 
     function formatCleanTime(str: string) {
@@ -167,7 +168,7 @@
         }
     }
 
-    function renderTyphoonData(tfId: string, tfNo: string, tfNameCn: string, tfNameEn: string, rawData: any, tfStatus = 'Active / 进行中') {
+    function renderTyphoonData(tfId: string, tfNo: string, tfNameCn: string, tfNameEn: string, rawData: any, tfStatus = '进行中') {
         if (!window.L || !layerGroup) return;
 
         const points = rawData[8] || [];
@@ -177,7 +178,7 @@
         map.off('click');
         map.on('click', () => { map.closePopup(); });
 
-        // 1. 绘制历史实况点（双语 Popup）
+        // 1. 绘制历史实况点（纯正中文）
         points.forEach((p: any) => {
             const timeStr = p[1];
             const lng = p[4];
@@ -191,11 +192,11 @@
 
             const popupHtml = `
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
-                    <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [Observed / 实况]</strong><br/>
-                    <b>📍 Time / 时间</b>：${formattedT}<br/>
-                    <b>🌬️ Wind / 风级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
-                    <b>📉 Pressure / 气压</b>：${pressure} hPa<br/>
-                    <b>🧭 Location / 坐标</b>：${lat}°N, ${lng}°E
+                    <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
+                    <b>📍 时间</b>：${formattedT}<br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                    <b>📉 中心气压</b>：${pressure} hPa<br/>
+                    <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                 </div>
             `;
 
@@ -219,7 +220,7 @@
             window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 4.5 }).addTo(layerGroup);
         }
 
-        // 2. 绘制未来预测虚线（双语 Popup）
+        // 2. 绘制未来预测线（纯正中文）
         if (points.length > 0) {
             const lastPointObj = points[points.length - 1];
             const forecastDict = lastPointObj[11] || {};
@@ -244,11 +245,11 @@
 
                     const fcPopupHtml = `
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
-                            <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [CMA +${fcHours}h Forecast / 预测]</strong><br/>
-                            <b>📍 Target Time / 时间</b>：${targetFormattedTime}<br/>
-                            <b>🌬️ Forecast Wind / 风级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
-                            <b>📉 Pressure / 气压</b>：${pressure} hPa<br/>
-                            <b>🧭 Location / 坐标</b>：${lat}°N, ${lng}°E
+                            <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
+                            <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                            <b>📉 预测中心气压</b>：${pressure} hPa<br/>
+                            <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                         </div>
                     `;
 
@@ -294,7 +295,7 @@
         }
         layerGroup.clearLayers();
 
-        statusText = '🌐 Connecting to CMA server (typhoon.nmc.cn) / 正在发起请求...';
+        statusText = '🌐 正在向中央气象台服务器 (typhoon.nmc.cn) 发起真实 HTTP 实时与预报请求...';
         typhoonListInfo = [];
 
         try {
@@ -306,27 +307,27 @@
             
             const match = text.match(/\((.*)\)/);
             if (!match || !match[1]) {
-                statusText = '❌ Response format error / 数据解析失败';
+                statusText = '❌ 实时请求返回格式异常。';
                 return;
             }
 
             const data = JSON.parse(match[1]);
             if (!data || !data.typhoonList || data.typhoonList.length === 0) {
-                statusText = '⚠️ No active typhoon found / 当前无活跃台风';
+                statusText = '⚠️ 中央气象台实时返回：当前无活跃台风。';
                 return;
             }
 
             const active = data.typhoonList.filter((t: any) => t[7] === 'start');
             const targetList = active.length > 0 ? active : data.typhoonList.slice(0, 3);
 
-            statusText = `✅ Loaded ${targetList.length} typhoon(s) from CMA / 成功渲染台风轨迹`;
+            statusText = `✅ 实时获取成功！正在绘制中央气象台 ${targetList.length} 个台风的实况与预报线...`;
 
             for (const item of targetList) {
                 const tfId = item[0];
                 const tfNameEn = item[1];
                 const tfNameCn = item[2];
                 const tfNo = item[4];
-                const tfStatus = item[7] === 'start' ? 'Active / 进行中' : 'Stopped / 已停编';
+                const tfStatus = item[7] === 'start' ? '进行中' : '已停编';
 
                 const viewUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/view_${tfId}?callback=cmaLiveView`;
                 const viewRes = await fetch(viewUrl);
@@ -347,10 +348,10 @@
                 }
             }
             
-            statusText = `✅ Live track & 120h forecast rendered! / 红色实况与金色预报线条就绪！`;
+            statusText = `✅ 实时拉取成功！地图已画出红色实况线与金色预报虚线！`;
         } catch (err: any) {
-            console.error("Fetch error", err);
-            statusText = `❌ Request blocked / 请求被拦截: ${err.message || 'Error'}`;
+            console.error("中央气象台实时联网请求失败", err);
+            statusText = `❌ 浏览器跨域拦截 (CORS/CSP)：无法直接直连 typhoon.nmc.cn。错误原因：${err.message || '网络拦截'}`;
         }
     }
 
