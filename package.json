@@ -1,0 +1,38 @@
+{
+    "name": "windy-plugin-cma-typhoon",
+    "version": "1.0.0",
+    "description": "Windy plugin for tracking typhoon with CMA data and 17-level Beaufort scale",
+    "main": "dist/plugin.min.js",
+    "type": "module",
+    "scripts": {
+        "build": "powershell -Command \"$env:SERVE='false'; $env:CONFIG='src'; Remove-Item -Recurse -Force dist -EA SilentlyContinue; New-Item -ItemType Directory -Path dist -Force; npx rollup -c; Copy-Item package.json dist/\"",
+        "start": "npx rollup -w -c",
+        "example01": "CONFIG=example01 rollup -w -c",
+        "example02": "CONFIG=example02 rollup -w -c",
+        "example03": "CONFIG=example03 rollup -w -c",
+        "example04": "CONFIG=example04 rollup -w -c",
+        "example05": "CONFIG=example05 rollup -w -c",
+        "example06": "CONFIG=example06 rollup -w -c",
+        "example07": "CONFIG=example07 rollup -w -c",
+        "build:all-examples": "for number in 01 02 03 04 05 06; do CONFIG=example$number SERVE=false rollup -c; done",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/windycom/windy-plugin-template.git"
+    },
+    "keywords": [
+        "windy",
+        "windy.com",
+        "plugins"
+    ],
+    "author": "Windyty, S.E.",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/windycom/windy-plugin-template/issues"
+    },
+    "homepage": "https://docs.windy-plugins.com/",
+    "dependencies": {
+        "@windycom/plugin-devtools": "^3.0.3"
+    }
+}

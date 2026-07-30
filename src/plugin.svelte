@@ -1,0 +1,374 @@
+<div class="plugin__mobile-header">
+    { title }
+</div>
+<section class="plugin__content">
+    <div
+        class="plugin__title plugin__title--chevron-back"
+        on:click={ () => bcast.emit('rqstOpen', 'menu') }
+    >
+    { title }
+    </div>
+    
+    <div style="padding: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #ffffff;">
+        <div style="background: rgba(24, 144, 255, 0.15); border-left: 4px solid #1890ff; padding: 10px; margin-bottom: 12px; border-radius: 4px;">
+            <strong style="color: #40a9ff; font-size: 14px;">🌀 中央气象台 (CMA) 实时与预报路径</strong>
+            <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">
+                数据来源：CMA 官方接口 (typhoon.nmc.cn)<br/>
+                列表：纯实况历史轨迹 | 地图：🔴 实况线 + 🟡 120h预测虚线
+            </p>
+        </div>
+
+        <div style="margin-bottom: 12px; font-size: 13px; color: #ffffff; background: #1f1f1f; padding: 10px; border-radius: 6px; border: 1px solid #333; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
+            { statusText }
+        </div>
+
+        <button 
+            on:click={ fetchCMATyphoonLive } 
+            style="width: 100%; padding: 10px; background: #1890ff; color: #ffffff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-shadow: 0 1px 2px rgba(0,0,0,0.5);"
+        >
+            📡 刷新中央气象台实时与预测路径
+        </button>
+
+        {#if typhoonListInfo.length > 0}
+            <div style="margin-top: 15px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ffffff; font-weight: bold;">🌀 台风历史实况演变（最新在顶部）：</h4>
+                {#each typhoonListInfo as item}
+                    <div style="background: #1e1e1e; border-radius: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid #3a3a3a; box-shadow: 0 2px 6px rgba(0,0,0,0.4);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 6px;">
+                            <strong style="color: #69c0ff; font-size: 15px;">🌀 {item.no} {item.nameCn} ({item.nameEn})</strong>
+                            <span style="background: {item.status === '进行中' ? '#275017' : '#434343'}; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;">
+                                ● {item.status}
+                            </span>
+                        </div>
+
+                        <div style="margin-top: 8px;">
+                            <div style="font-size: 12px; color: #8c8c8c; margin-bottom: 8px; font-weight: bold;">📜 历史实况轨迹（最新在顶部，点击直达并弹窗）：</div>
+                            <div style="max-height: 520px; overflow-y: auto; padding-right: 4px;">
+                                {#each item.historyPoints as pt, idx}
+                                    <div 
+                                        on:click={() => focusPoint(pt)}
+                                        style="background: {idx === 0 ? '#1b3547' : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid {idx === 0 ? '#1890ff' : '#383838'}; transition: background 0.2s;"
+                                    >
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            {#if idx === 0}
+                                                <span style="background: #1890ff; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: bold;">最新实况</span>
+                                            {/if}
+                                            <span style="color: #ffffff; font-weight: {idx === 0 ? 'bold' : 'normal'};">🕒 {pt.formatTime}</span>
+                                        </div>
+
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <span style="color: #aaa; font-size: 12px;">{pt.pressure} hPa</span>
+                                            <span style="background: {pt.bft.color}; color: {pt.bft.textColor}; padding: 3px 10px; border-radius: 4px; font-weight: bold; text-shadow: {pt.bft.textColor === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.8)' : 'none'}; min-width: 100px; text-align: center;">
+                                                {pt.bft.text} ({pt.speedMs}m/s)
+                                            </span>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    </div>
+                {/each}
+            </div>
+        {/if}
+    </div>
+</section>
+
+<script lang="ts">
+    import bcast from "@windy/broadcast";
+    import { map } from "@windy/map";
+    import { onDestroy, onMount } from 'svelte';
+    import config from './pluginConfig';
+
+    const { title } = config;
+
+    let statusText = '点击上方按钮发起中央气象台实时联网请求...';
+    let typhoonListInfo: Array<any> = [];
+    let layerGroup: any = null;
+
+    function getBeaufort(ms: number) {
+        if (ms < 0.3) return { text: "0级", color: "#E8E8E8", textColor: "#000000" };
+        if (ms <= 1.5) return { text: "1级", color: "#B5F5EC", textColor: "#000000" };
+        if (ms <= 3.3) return { text: "2级", color: "#87E8DE", textColor: "#000000" };
+        if (ms <= 5.4) return { text: "3级", color: "#5CDBD3", textColor: "#000000" };
+        if (ms <= 7.9) return { text: "4级", color: "#95DE64", textColor: "#000000" };
+        if (ms <= 10.7) return { text: "5级", color: "#73D13D", textColor: "#000000" };
+        if (ms <= 13.8) return { text: "6级强风", color: "#389E0D", textColor: "#FFFFFF" };
+        if (ms <= 17.1) return { text: "7级劲风", color: "#FADB14", textColor: "#000000" };
+        if (ms <= 20.7) return { text: "8级热带低压", color: "#FA8C16", textColor: "#FFFFFF" };
+        if (ms <= 24.4) return { text: "9级热带风暴", color: "#ED571A", textColor: "#FFFFFF" };
+        if (ms <= 28.4) return { text: "10级强热带风暴", color: "#CF1322", textColor: "#FFFFFF" };
+        if (ms <= 32.6) return { text: "11级暴风", color: "#A8071A", textColor: "#FFFFFF" };
+        if (ms <= 36.9) return { text: "12级台风", color: "#C41D7F", textColor: "#FFFFFF" };
+        if (ms <= 41.4) return { text: "13级台风", color: "#9E1068", textColor: "#FFFFFF" };
+        if (ms <= 46.1) return { text: "14级强台风", color: "#722ED1", textColor: "#FFFFFF" };
+        if (ms <= 50.9) return { text: "15级强台风", color: "#531DAB", textColor: "#FFFFFF" };
+        if (ms <= 56.0) return { text: "16级超强台风", color: "#391085", textColor: "#FFFFFF" };
+        return { text: "17级超强台风", color: "#120338", textColor: "#FFFFFF" };
+    }
+
+    function formatCleanTime(str: string) {
+        if (!str || str.length < 12) return str;
+        try {
+            const y = parseInt(str.substring(0, 4), 10);
+            const m = parseInt(str.substring(4, 6), 10) - 1;
+            const d = parseInt(str.substring(6, 8), 10);
+            const h = parseInt(str.substring(8, 10), 10);
+
+            const utcDate = new Date(Date.UTC(y, m, d, h, 0, 0));
+            const bjTimeMs = utcDate.getTime() + 8 * 3600 * 1000;
+            const bjDate = new Date(bjTimeMs);
+
+            const bjM = String(bjDate.getUTCMonth() + 1).padStart(2, '0');
+            const bjD = String(bjDate.getUTCDate()).padStart(2, '0');
+            const bjH = String(bjDate.getUTCHours()).padStart(2, '0');
+
+            return `${bjM}-${bjD} ${bjH}:00`;
+        } catch (e) {
+            return str;
+        }
+    }
+
+    function formatForecastTime(baseStr: string, fcHours: number) {
+        if (!baseStr || baseStr.length < 12) return baseStr;
+        try {
+            const y = parseInt(baseStr.substring(0, 4), 10);
+            const m = parseInt(baseStr.substring(4, 6), 10) - 1;
+            const d = parseInt(baseStr.substring(6, 8), 10);
+            const h = parseInt(baseStr.substring(8, 10), 10);
+
+            const utcDate = new Date(Date.UTC(y, m, d, h, 0, 0));
+            const targetMs = utcDate.getTime() + (fcHours * 3600 * 1000) + (8 * 3600 * 1000);
+            const targetDate = new Date(targetMs);
+
+            const bjM = String(targetDate.getUTCMonth() + 1).padStart(2, '0');
+            const bjD = String(targetDate.getUTCDate()).padStart(2, '0');
+            const bjH = String(targetDate.getUTCHours()).padStart(2, '0');
+
+            return `${bjM}-${bjD} ${bjH}:00`;
+        } catch (e) {
+            return baseStr;
+        }
+    }
+
+    export const onopen = (_params: unknown) => {
+        fetchCMATyphoonLive();
+    };
+
+    export const onclose = () => {
+        if (layerGroup) {
+            layerGroup.clearLayers();
+        }
+    };
+
+    function focusPoint(pt: any) {
+        map.flyTo([pt.lat, pt.lng], 6);
+        if (pt.markerInstance) {
+            pt.markerInstance.openPopup();
+        }
+    }
+
+    function renderTyphoonData(tfId: string, tfNo: string, tfNameCn: string, tfNameEn: string, rawData: any, tfStatus = '进行中') {
+        if (!window.L || !layerGroup) return;
+
+        const points = rawData[8] || [];
+        const realLatlngs: any[] = [];
+        const realPointsList: any[] = [];
+
+        map.off('click');
+        map.on('click', () => { map.closePopup(); });
+
+        // 1. 绘制历史实况点（红色实线 + 纯正实况列表）
+        points.forEach((p: any) => {
+            const timeStr = p[1];
+            const lng = p[4];
+            const lat = p[5];
+            const pressure = p[6];
+            const speedMs = p[7];
+            const bft = getBeaufort(speedMs);
+            const formattedT = formatCleanTime(timeStr);
+
+            realLatlngs.push([lat, lng]);
+
+            const popupHtml = `
+                <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
+                    <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
+                    <b>📍 时间</b>：${formattedT}<br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                    <b>📉 中心气压</b>：${pressure} hPa<br/>
+                    <b>🧭 坐标</b>：${lat}°N, ${lng}°E
+                </div>
+            `;
+
+            const popupOptions = { closeOnClick: true, autoClose: true };
+
+            const hitArea = window.L.circleMarker([lat, lng], {
+                radius: 28, stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: 0.001, interactive: true
+            }).addTo(layerGroup);
+
+            const marker = window.L.circleMarker([lat, lng], {
+                radius: 8, color: '#ffffff', weight: 2, fillColor: bft.color, fillOpacity: 0.95, interactive: true
+            }).addTo(layerGroup);
+
+            hitArea.bindPopup(popupHtml, popupOptions);
+            marker.bindPopup(popupHtml, popupOptions);
+
+            realPointsList.push({ lat, lng, timeStr, formatTime: formattedT, pressure, speedMs, bft, isForecast: false, markerInstance: hitArea });
+        });
+
+        if (realLatlngs.length > 0) {
+            window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 4.5 }).addTo(layerGroup);
+        }
+
+        // 2. 地图上继续绘制【金色未来预测虚线 + 预报圆点】（不在侧边栏列表中堆叠）
+        if (points.length > 0) {
+            const lastPointObj = points[points.length - 1];
+            const forecastDict = lastPointObj[11] || {};
+            const babjForecast = forecastDict['BABJ'] || (Object.values(forecastDict)[0] as any[]) || [];
+
+            if (babjForecast.length > 0 && realLatlngs.length > 0) {
+                const lastRealCoord = realLatlngs[realLatlngs.length - 1];
+                const forecastLatlngs: any[] = [lastRealCoord];
+
+                babjForecast.forEach((fc: any) => {
+                    const fcHours = fc[0];
+                    const baseTimeStr = fc[1];
+                    const lng = fc[2];
+                    const lat = fc[3];
+                    const pressure = fc[4];
+                    const speedMs = fc[5];
+                    const bft = getBeaufort(speedMs);
+
+                    const targetFormattedTime = formatForecastTime(baseTimeStr, fcHours);
+
+                    forecastLatlngs.push([lat, lng]);
+
+                    const fcPopupHtml = `
+                        <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
+                            <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
+                            <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                            <b>📉 预测中心气压</b>：${pressure} hPa<br/>
+                            <b>🧭 坐标</b>：${lat}°N, ${lng}°E
+                        </div>
+                    `;
+
+                    const popupOptions = { closeOnClick: true, autoClose: true };
+
+                    const fcHitArea = window.L.circleMarker([lat, lng], {
+                        radius: 28, stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: 0.001, interactive: true
+                    }).addTo(layerGroup);
+
+                    const fcMarker = window.L.circleMarker([lat, lng], {
+                        radius: 8, color: '#faad14', weight: 2.5, fillColor: bft.color, fillOpacity: 0.95, interactive: true
+                    }).addTo(layerGroup);
+
+                    fcHitArea.bindPopup(fcPopupHtml, popupOptions);
+                    fcMarker.bindPopup(fcPopupHtml, popupOptions);
+                });
+
+                // 绘制金黄色的未来预测虚线折线！
+                window.L.polyline(forecastLatlngs, { color: '#faad14', weight: 4, dashArray: '8,8' }).addTo(layerGroup);
+            }
+        }
+
+        if (realPointsList.length > 0) {
+            // 侧边栏列表只保留纯粹的【实况历史轨迹(倒序，最新在顶部)】
+            const reversedReal = [...realPointsList].reverse();
+
+            typhoonListInfo = [...typhoonListInfo.filter(t => t.id !== tfId), {
+                id: tfId,
+                no: tfNo,
+                nameCn: tfNameCn,
+                nameEn: tfNameEn,
+                status: tfStatus,
+                historyPoints: reversedReal
+            }];
+
+            const latestPt = realLatlngs[realLatlngs.length - 1];
+            map.flyTo([latestPt[0], latestPt[1]], 5);
+        }
+    }
+
+    async function fetchCMATyphoonLive() {
+        if (!window.L) return;
+        if (!layerGroup) {
+            layerGroup = window.L.layerGroup().addTo(map);
+        }
+        layerGroup.clearLayers();
+
+        statusText = '🌐 正在向中央气象台服务器 (typhoon.nmc.cn) 发起真实 HTTP 实时与预报请求...';
+        typhoonListInfo = [];
+
+        try {
+            const currentYear = new Date().getFullYear();
+            const listUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/list_${currentYear}?callback=cmaLiveList`;
+            
+            const res = await fetch(listUrl);
+            const text = await res.text();
+            
+            const match = text.match(/\((.*)\)/);
+            if (!match || !match[1]) {
+                statusText = '❌ 实时请求返回格式异常。';
+                return;
+            }
+
+            const data = JSON.parse(match[1]);
+            if (!data || !data.typhoonList || data.typhoonList.length === 0) {
+                statusText = '⚠️ 中央气象台实时返回：当前无活跃台风。';
+                return;
+            }
+
+            const active = data.typhoonList.filter((t: any) => t[7] === 'start');
+            const targetList = active.length > 0 ? active : data.typhoonList.slice(0, 3);
+
+            statusText = `✅ 实时获取成功！正在绘制中央气象台 ${targetList.length} 个台风的实况与预报线...`;
+
+            for (const item of targetList) {
+                const tfId = item[0];
+                const tfNameEn = item[1];
+                const tfNameCn = item[2];
+                const tfNo = item[4];
+                const tfStatus = item[7] === 'start' ? '进行中' : '已停编';
+
+                const viewUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/view_${tfId}?callback=cmaLiveView`;
+                const viewRes = await fetch(viewUrl);
+                const viewText = await viewRes.text();
+                const viewMatch = viewText.match(/\((.*)\)/);
+                if (viewMatch && viewMatch[1]) {
+                    const viewData = JSON.parse(viewMatch[1]);
+                    if (viewData && viewData.typhoon) {
+                        renderTyphoonData(
+                            tfId,
+                            tfNo,
+                            tfNameCn,
+                            tfNameEn,
+                            viewData.typhoon,
+                            tfStatus
+                        );
+                    }
+                }
+            }
+            
+            statusText = `✅ 实时拉取成功！地图已画出红色实况线与金色预报虚线！`;
+        } catch (err: any) {
+            console.error("中央气象台实时联网请求失败", err);
+            statusText = `❌ 浏览器跨域拦截 (CORS/CSP)：无法直接直连 typhoon.nmc.cn。错误原因：${err.message || '网络拦截'}`;
+        }
+    }
+
+    onMount(() => {
+        if (window.L && !layerGroup) {
+            layerGroup = window.L.layerGroup().addTo(map);
+        }
+    });
+
+    onDestroy(() => {
+        onclose();
+    });
+</script>
+
+<style lang="less">
+    .plugin__content {
+        color: #fff;
+    }
+</style>
