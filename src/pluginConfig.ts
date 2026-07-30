@@ -1,18 +1,15 @@
-import type { ExternalPluginConfig } from '@windy/interfaces';
+import type { ExternalPluginConfig } from '@windy/plugins';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-cma-typhoon',
     version: '1.0.0',
     icon: '🌀',
-    title: '中央气象台 (CMA) 台风 17 级风级追踪',
-    description: '对接中国中央气象台 (CMA) 高频加密数据，提供蒲氏 17 级风级与实时台风路径',
-    author: 'JHZ',
-    repository: 'https://github.com/JHZ/windy-plugin-cma-typhoon',
+    title: 'CMA Typhoon Tracker | 中央气象台台风追踪',
+    description: 'China Meteorological Administration (CMA) real-time typhoon tracker with 17-level Beaufort scale and 120h forecast track.',
+    author: 'jianghanzhi2006-dotcom',
+    repository: 'https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon',
     desktopUI: 'rhpane',
     mobileUI: 'fullscreen',
-    routerPath: '/cma-typhoon',
-    private: true,
 };
 
 export default config;
-
