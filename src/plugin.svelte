@@ -202,11 +202,11 @@
             const popupOptions = { closeOnClick: true, autoClose: true };
 
             const hitArea = window.L.circleMarker([lat, lng], {
-                radius: 28, stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: 0.001, interactive: true
+                radius: 18, stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: 0.001, interactive: true
             }).addTo(layerGroup);
 
             const marker = window.L.circleMarker([lat, lng], {
-                radius: 8, color: '#ffffff', weight: 2, fillColor: bft.color, fillOpacity: 0.95, interactive: true
+                radius: 4, color: '#ffffff', weight: 1.5, fillColor: bft.color, fillOpacity: 1, interactive: true
             }).addTo(layerGroup);
 
             hitArea.bindPopup(popupHtml, popupOptions);
@@ -216,7 +216,7 @@
         });
 
         if (realLatlngs.length > 0) {
-            window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 4.5 }).addTo(layerGroup);
+            window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 2.5 }).addTo(layerGroup);
         }
 
         // 2. 绘制未来预测线（纯正中文）
@@ -255,18 +255,18 @@
                     const popupOptions = { closeOnClick: true, autoClose: true };
 
                     const fcHitArea = window.L.circleMarker([lat, lng], {
-                        radius: 28, stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: 0.001, interactive: true
+                        radius: 18, stroke: false, fill: true, fillColor: '#ffffff', fillOpacity: 0.001, interactive: true
                     }).addTo(layerGroup);
 
                     const fcMarker = window.L.circleMarker([lat, lng], {
-                        radius: 8, color: '#faad14', weight: 2.5, fillColor: bft.color, fillOpacity: 0.95, interactive: true
+                        radius: 4, color: '#faad14', weight: 1.5, fillColor: bft.color, fillOpacity: 1, interactive: true
                     }).addTo(layerGroup);
 
                     fcHitArea.bindPopup(fcPopupHtml, popupOptions);
                     fcMarker.bindPopup(fcPopupHtml, popupOptions);
                 });
 
-                window.L.polyline(forecastLatlngs, { color: '#faad14', weight: 4, dashArray: '8,8' }).addTo(layerGroup);
+                window.L.polyline(forecastLatlngs, { color: '#faad14', weight: 2.5, dashArray: '6,6' }).addTo(layerGroup);
             }
         }
 

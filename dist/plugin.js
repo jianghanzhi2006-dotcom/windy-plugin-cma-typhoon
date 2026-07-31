@@ -8,8 +8,8 @@ const __pluginConfig =  {
   "repository": "https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon",
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
-  "built": 1785457166907,
-  "builtReadable": "2026-07-31T00:19:26.907Z",
+  "built": 1785457617685,
+  "builtReadable": "2026-07-31T00:26:57.685Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -1418,7 +1418,7 @@ function instance($$self, $$props, $$invalidate) {
 			const popupOptions = { closeOnClick: true, autoClose: true };
 
 			const hitArea = window.L.circleMarker([lat, lng], {
-				radius: 28,
+				radius: 18,
 				stroke: false,
 				fill: true,
 				fillColor: '#ffffff',
@@ -1427,11 +1427,11 @@ function instance($$self, $$props, $$invalidate) {
 			}).addTo(layerGroup);
 
 			const marker = window.L.circleMarker([lat, lng], {
-				radius: 8,
+				radius: 4,
 				color: '#ffffff',
-				weight: 2,
+				weight: 1.5,
 				fillColor: bft.color,
-				fillOpacity: 0.95,
+				fillOpacity: 1,
 				interactive: true
 			}).addTo(layerGroup);
 
@@ -1452,7 +1452,7 @@ function instance($$self, $$props, $$invalidate) {
 		});
 
 		if (realLatlngs.length > 0) {
-			window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 4.5 }).addTo(layerGroup);
+			window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 2.5 }).addTo(layerGroup);
 		}
 
 		if (points.length > 0) {
@@ -1488,7 +1488,7 @@ function instance($$self, $$props, $$invalidate) {
 					const popupOptions = { closeOnClick: true, autoClose: true };
 
 					const fcHitArea = window.L.circleMarker([lat, lng], {
-						radius: 28,
+						radius: 18,
 						stroke: false,
 						fill: true,
 						fillColor: '#ffffff',
@@ -1497,11 +1497,11 @@ function instance($$self, $$props, $$invalidate) {
 					}).addTo(layerGroup);
 
 					const fcMarker = window.L.circleMarker([lat, lng], {
-						radius: 8,
+						radius: 4,
 						color: '#faad14',
-						weight: 2.5,
+						weight: 1.5,
 						fillColor: bft.color,
-						fillOpacity: 0.95,
+						fillOpacity: 1,
 						interactive: true
 					}).addTo(layerGroup);
 
@@ -1511,8 +1511,8 @@ function instance($$self, $$props, $$invalidate) {
 
 				window.L.polyline(forecastLatlngs, {
 					color: '#faad14',
-					weight: 4,
-					dashArray: '8,8'
+					weight: 2.5,
+					dashArray: '6,6'
 				}).addTo(layerGroup);
 			}
 		}
