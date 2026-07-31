@@ -3,13 +3,14 @@ const __pluginConfig =  {
   "version": "1.0.0",
   "icon": "🌀",
   "title": "中央气象台 (CMA) 台风 17 级风级追踪",
-  "description": "China Meteorological Administration (CMA) real-time typhoon tracker with 17-level Beaufort wind scale and 120h forecast track.",
+  "description": "China Meteorological Administration (CMA) real-time typhoon tracker with 18-level Beaufort wind scale and color-coded track.",
   "author": "jianghanzhi2006-dotcom",
   "repository": "https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon",
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
-  "built": 1785458390519,
-  "builtReadable": "2026-07-31T00:39:50.519Z",
+  "private": false,
+  "built": 1785499824980,
+  "builtReadable": "2026-07-31T12:10:24.980Z",
   "screenshot": "screenshot.jpg"
 };
 

@@ -1,11 +1,11 @@
 {
     "name": "windy-plugin-cma-typhoon",
     "version": "1.0.0",
-    "description": "Windy plugin for tracking typhoon with CMA data and 17-level Beaufort scale",
+    "description": "Windy plugin for tracking typhoon with CMA data, 18-level Beaufort scale and color-coded tracks",
     "main": "dist/plugin.min.js",
     "type": "module",
     "scripts": {
-        "build": "powershell -Command \"$env:SERVE='false'; $env:CONFIG='src'; Remove-Item -Recurse -Force dist -EA SilentlyContinue; New-Item -ItemType Directory -Path dist -Force; npx rollup -c; Copy-Item package.json dist/\"",
+        "build": "powershell -Command \"$env:SERVE='false'; $env:CONFIG='src'; Remove-Item -Recurse -Force dist -EA SilentlyContinue; New-Item -ItemType Directory -Path dist -Force; npx rollup -c; Copy-Item package.json dist/; Copy-Item src/screenshot.jpg dist/ -EA SilentlyContinue\"",
         "start": "npx rollup -w -c",
         "example01": "CONFIG=example01 rollup -w -c",
         "example02": "CONFIG=example02 rollup -w -c",
@@ -19,17 +19,17 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/windycom/windy-plugin-template.git"
+        "url": "git+https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon.git"
     },
     "keywords": [
         "windy",
         "windy.com",
         "plugins"
     ],
-    "author": "Windyty, S.E.",
+    "author": "jianghanzhi2006-dotcom",
     "license": "ISC",
     "bugs": {
-        "url": "https://github.com/windycom/windy-plugin-template/issues"
+        "url": "https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon/issues"
     },
     "homepage": "https://docs.windy-plugins.com/",
     "dependencies": {
