@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785499824980,
-  "builtReadable": "2026-07-31T12:10:24.980Z",
+  "built": 1785503598372,
+  "builtReadable": "2026-07-31T13:13:18.372Z",
   "screenshot": "screenshot.jpg"
 };
 

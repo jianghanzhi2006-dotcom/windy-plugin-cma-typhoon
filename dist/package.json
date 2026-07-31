@@ -5,7 +5,7 @@
     "main": "dist/plugin.min.js",
     "type": "module",
     "scripts": {
-        "build": "powershell -Command \"$env:SERVE='false'; $env:CONFIG='src'; Remove-Item -Recurse -Force dist -EA SilentlyContinue; New-Item -ItemType Directory -Path dist -Force; npx rollup -c; Copy-Item package.json dist/; Copy-Item src/screenshot.jpg dist/ -EA SilentlyContinue\"",
+        "build": "node scripts/build.js",
         "start": "npx rollup -w -c",
         "example01": "CONFIG=example01 rollup -w -c",
         "example02": "CONFIG=example02 rollup -w -c",
