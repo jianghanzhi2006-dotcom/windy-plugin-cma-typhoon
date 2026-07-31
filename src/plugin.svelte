@@ -48,20 +48,18 @@
                                 {#each item.historyPoints as pt, idx}
                                     <div 
                                         on:click={() => focusPoint(pt)}
-                                        style="background: {idx === 0 ? '#1b3547' : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid {idx === 0 ? '#1890ff' : '#383838'}; transition: background 0.2s;"
+                                        style="background: {idx === 0 ? '#132738' : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: {idx === 0 ? '1.5px solid #1890ff' : '1px solid #383838'}; box-shadow: {idx === 0 ? '0 0 8px rgba(24,144,255,0.35)' : 'none'}; transition: all 0.2s;"
                                     >
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            {#if idx === 0}
-                                                <span style="background: #1890ff; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: bold;">最新实况</span>
-                                            {/if}
-                                            <span style="color: #ffffff; font-weight: {idx === 0 ? 'bold' : 'normal'};">🕒 {pt.formatTime}</span>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="color: {idx === 0 ? '#40a9ff' : '#ffffff'}; font-weight: {idx === 0 ? 'bold' : 'normal'};">{pt.formatTime}</span>
                                         </div>
 
                                         <div style="display: flex; align-items: center; gap: 10px;">
                                             <span style="color: #aaa; font-size: 12px;">{pt.pressure} hPa</span>
-                                            <span style="background: {pt.bft.color}; color: {pt.bft.textColor}; padding: 3px 10px; border-radius: 4px; font-weight: bold; text-shadow: {pt.bft.textColor === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.8)' : 'none'}; min-width: 100px; text-align: center;">
-                                                {pt.bft.text} ({pt.speedMs}m/s)
-                                            </span>
+                                            <div style="background: {pt.bft.color}; color: {pt.bft.textColor}; padding: 4px 10px; border-radius: 6px; font-weight: bold; text-shadow: {pt.bft.textColor === '#ffffff' ? '0 1px 2px rgba(0,0,0,0.8)' : 'none'}; min-width: 110px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                                <span style="font-size: 13px; line-height: 1.2;">{pt.bft.text}</span>
+                                                <span style="font-size: 12px; line-height: 1.2; opacity: 0.95; margin-top: 2px;">({pt.speedMs}m/s)</span>
+                                            </div>
                                         </div>
                                     </div>
                                 {/each}
@@ -104,7 +102,8 @@
         if (ms <= 46.1) return { text: "14级强台风", color: "#722ED1", textColor: "#FFFFFF" };
         if (ms <= 50.9) return { text: "15级强台风", color: "#531DAB", textColor: "#FFFFFF" };
         if (ms <= 56.0) return { text: "16级超强台风", color: "#391085", textColor: "#FFFFFF" };
-        return { text: "17级及以上超强台风", color: "#120338", textColor: "#FFFFFF" };
+        if (ms <= 61.2) return { text: "17级超强台风", color: "#230759", textColor: "#FFFFFF" };
+        return { text: "18级超强台风", color: "#120338", textColor: "#FFFFFF" };
     }
 
     function formatCleanTime(str: string) {
