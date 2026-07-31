@@ -8,8 +8,8 @@ const __pluginConfig =  {
   "repository": "https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon",
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
-  "built": 1785457617685,
-  "builtReadable": "2026-07-31T00:26:57.685Z",
+  "built": 1785458390519,
+  "builtReadable": "2026-07-31T00:39:50.519Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -1108,7 +1108,7 @@ function create_fragment(ctx) {
 
 			div2.innerHTML = `<strong style="color: #40a9ff; font-size: 14px;">🌀 中央气象台 (CMA) 实时与预报路径</strong> <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">数据来源：CMA 官方接口 (typhoon.nmc.cn)<br/>
                 风力标准：蒲氏 17 级 (2分钟平均风速)<br/>
-                轨迹说明：🔴 红色实线 (实况) | 🟡 金色虚线 (120h预测)</p>`;
+                轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)</p>`;
 
 			t9 = space();
 			div3 = element("div");
@@ -1387,7 +1387,7 @@ function instance($$self, $$props, $$invalidate) {
 	function renderTyphoonData(tfId, tfNo, tfNameCn, tfNameEn, rawData, tfStatus = '进行中') {
 		if (!window.L || !layerGroup) return;
 		const points = rawData[8] || [];
-		const realLatlngs = [];
+		const realSegments = [];
 		const realPointsList = [];
 		map.off('click');
 
@@ -1403,7 +1403,7 @@ function instance($$self, $$props, $$invalidate) {
 			const speedMs = p[7];
 			const bft = getBeaufort(speedMs);
 			const formattedT = formatCleanTime(timeStr);
-			realLatlngs.push([lat, lng]);
+			realSegments.push({ latlng: [lat, lng], color: bft.color });
 
 			const popupHtml = `
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
@@ -1451,8 +1451,9 @@ function instance($$self, $$props, $$invalidate) {
 			});
 		});
 
-		if (realLatlngs.length > 0) {
-			window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 2.5 }).addTo(layerGroup);
+		for (let i = 0; i < realSegments.length - 1; i++) {
+			const segColor = realSegments[i].color;
+			window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], { color: segColor, weight: 2.5 }).addTo(layerGroup);
 		}
 
 		if (points.length > 0) {
@@ -1460,8 +1461,8 @@ function instance($$self, $$props, $$invalidate) {
 			const forecastDict = lastPointObj[11] || {};
 			const babjForecast = forecastDict['BABJ'] || Object.values(forecastDict)[0] || [];
 
-			if (babjForecast.length > 0 && realLatlngs.length > 0) {
-				const lastRealCoord = realLatlngs[realLatlngs.length - 1];
+			if (babjForecast.length > 0 && realSegments.length > 0) {
+				const lastRealCoord = realSegments[realSegments.length - 1].latlng;
 				const forecastLatlngs = [lastRealCoord];
 
 				babjForecast.forEach(fc => {
@@ -1532,7 +1533,7 @@ function instance($$self, $$props, $$invalidate) {
 				}
 			]);
 
-			const latestPt = realLatlngs[realLatlngs.length - 1];
+			const latestPt = realSegments[realSegments.length - 1].latlng;
 			map.flyTo([latestPt[0], latestPt[1]], 5);
 		}
 	}
@@ -1595,7 +1596,7 @@ function instance($$self, $$props, $$invalidate) {
 				}
 			}
 
-			$$invalidate(0, statusText = `✅ 实时拉取成功！地图已画出红色实况线与金色预报虚线！`);
+			$$invalidate(0, statusText = `✅ 实时拉取成功！地图已画出实况线与金色预报虚线！`);
 		} catch(err) {
 			console.error("中央气象台实时联网请求失败", err);
 			$$invalidate(0, statusText = `❌ 浏览器跨域拦截 (CORS/CSP)：无法直接直连 typhoon.nmc.cn。错误原因：${err.message || '网络拦截'}`);

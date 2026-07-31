@@ -15,7 +15,7 @@
             <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">
                 数据来源：CMA 官方接口 (typhoon.nmc.cn)<br/>
                 风力标准：蒲氏 17 级 (2分钟平均风速)<br/>
-                轨迹说明：🔴 红色实线 (实况) | 🟡 金色虚线 (120h预测)
+                轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)
             </p>
         </div>
 
@@ -171,7 +171,7 @@
         if (!window.L || !layerGroup) return;
 
         const points = rawData[8] || [];
-        const realLatlngs: any[] = [];
+        const realSegments: any[] = []; // { latlng, color }
         const realPointsList: any[] = [];
 
         map.off('click');
@@ -187,7 +187,7 @@
             const bft = getBeaufort(speedMs);
             const formattedT = formatCleanTime(timeStr);
 
-            realLatlngs.push([lat, lng]);
+            realSegments.push({ latlng: [lat, lng], color: bft.color });
 
             const popupHtml = `
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
@@ -215,8 +215,10 @@
             realPointsList.push({ lat, lng, timeStr, formatTime: formattedT, pressure, speedMs, bft, isForecast: false, markerInstance: hitArea });
         });
 
-        if (realLatlngs.length > 0) {
-            window.L.polyline(realLatlngs, { color: '#ff4d4f', weight: 2.5 }).addTo(layerGroup);
+        // 绘制按风力等级分色的实况路径线段
+        for (let i = 0; i < realSegments.length - 1; i++) {
+            const segColor = realSegments[i].color;
+            window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], { color: segColor, weight: 2.5 }).addTo(layerGroup);
         }
 
         // 2. 绘制未来预测线（纯正中文）
@@ -225,8 +227,8 @@
             const forecastDict = lastPointObj[11] || {};
             const babjForecast = forecastDict['BABJ'] || (Object.values(forecastDict)[0] as any[]) || [];
 
-            if (babjForecast.length > 0 && realLatlngs.length > 0) {
-                const lastRealCoord = realLatlngs[realLatlngs.length - 1];
+            if (babjForecast.length > 0 && realSegments.length > 0) {
+                const lastRealCoord = realSegments[realSegments.length - 1].latlng;
                 const forecastLatlngs: any[] = [lastRealCoord];
 
                 babjForecast.forEach((fc: any) => {
@@ -282,7 +284,7 @@
                 historyPoints: reversedReal
             }];
 
-            const latestPt = realLatlngs[realLatlngs.length - 1];
+            const latestPt = realSegments[realSegments.length - 1].latlng;
             map.flyTo([latestPt[0], latestPt[1]], 5);
         }
     }
@@ -347,7 +349,7 @@
                 }
             }
             
-            statusText = `✅ 实时拉取成功！地图已画出红色实况线与金色预报虚线！`;
+            statusText = `✅ 实时拉取成功！地图已画出实况线与金色预报虚线！`;
         } catch (err: any) {
             console.error("中央气象台实时联网请求失败", err);
             statusText = `❌ 浏览器跨域拦截 (CORS/CSP)：无法直接直连 typhoon.nmc.cn。错误原因：${err.message || '网络拦截'}`;
