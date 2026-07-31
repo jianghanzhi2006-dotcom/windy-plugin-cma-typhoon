@@ -17,6 +17,8 @@ jobs:
               run: |
                   npm install
                   npm run build
+            - name: Install jq
+              run: sudo apt-get update -y && sudo apt-get install -y jq
             - name: Publish Plugin
               run: |
                   if [ -z "$WINDY_API_KEY" ]; then
