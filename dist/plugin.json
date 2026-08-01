@@ -1,15 +1,15 @@
 {
   "name": "windy-plugin-cma-typhoon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "icon": "🌀",
-  "title": "中央气象台 (CMA) 台风 17 级风级追踪",
-  "description": "China Meteorological Administration (CMA) real-time typhoon tracker with 18-level Beaufort wind scale and color-coded track.",
+  "title": "中央气象台 (CMA) 台风路径追踪",
+  "description": "CMA real-time typhoon tracker using the GB/T 28591-2012 0–17 wind scale, with a clearly labeled extended Level 18 above 61.2 m/s and GB/T 19201-2006 tropical-cyclone categories.",
   "author": "jianghanzhi2006-dotcom",
   "repository": "https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon",
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785503598383,
-  "builtReadable": "2026-07-31T13:13:18.383Z",
+  "built": 1785583832328,
+  "builtReadable": "2026-08-01T11:30:32.328Z",
   "screenshot": "screenshot.jpg"
 }

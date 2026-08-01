@@ -1,31 +1,51 @@
 # windy-plugin-cma-typhoon
 
 [![Windy Plugin](https://img.shields.io/badge/Windy-Plugin-blue.svg)](https://www.windy.com)
-[![Data Source](https://img.shields.io/badge/Data%20Source-CMA%20(typhoon.nmc.cn)-red.svg)](https://typhoon.nmc.cn)
+[![Data Source](<https://img.shields.io/badge/Data%20Source-CMA%20(typhoon.nmc.cn)-red.svg>)](https://typhoon.nmc.cn)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An official [Windy.com](https://www.windy.com) extension for real-time tracking of Western Pacific typhoons using official China Meteorological Administration (CMA) data and the 18-level Beaufort wind scale (GB/T 19201-2006).
+A third-party [Windy.com](https://www.windy.com) plugin for tracking Western Pacific typhoons with China Meteorological Administration (CMA) observed and forecast data.
 
-## ✨ Features
+## Standards and the extended Level 18
 
-- 📡 **Direct Live CMA Integration**: Connects directly to CMA servers (`typhoon.nmc.cn`) for official real-time observed track and 120-hour forecast points.
-- 🌀 **18-Level Beaufort Scale**: Converts 2-minute average wind speed (m/s) into 1–18 Beaufort scale levels according to Chinese national standard GB/T 19201-2006, distinguishing Level 17 and Level 18+ Super Typhoons.
-- 🎨 **High Contrast Color Badges**: High contrast badges for both dark and light UI backgrounds, spanning Tropical Depressions to Super Typhoons.
-- 🌈 **Color-Coded Track Segments**: Each segment of the observed track is colored by wind intensity level, providing an at-a-glance view of the typhoon's strength evolution.
-- 🟡 **Golden Dashed Forecast Line**: CMA official +12h to +120h forecast track rendered as a golden dashed polyline.
-- 🕒 **Automatic UTC to Beijing Time (UTC+8) Conversion**: Automatically calculates accurate target forecast dates and times.
-- 🖱️ **Touch-Friendly Hit Radius**: Invisible hit areas for easy node selection and click-outside dismissal.
+- **Wind force Levels 0–17:** mapped from 2-minute average wind speed according to **GB/T 28591-2012, Wind scale**. Under that standard, Level 17 starts at 56.1 m/s and has no separate upper level.
+- **Level 18 (extended):** the plugin keeps an additional `> 61.2 m/s` display band because it makes exceptionally intense points easier to distinguish on the map. It is labeled **“18级（扩展）/ Level 18 (extended)”** throughout the UI and is a visualization convention of this plugin, not a level defined by GB/T 28591-2012.
+- **Tropical-cyclone categories:** descriptions from tropical depression through super typhoon follow **GB/T 19201-2006, Grade of tropical cyclones**.
 
-## 📸 Screenshot
+## Features
 
-![Plugin Screenshot](screenshot.png)
+- 📡 **Live CMA data:** requests observed tracks and CMA forecast points directly from `typhoon.nmc.cn`.
+- 🌈 **Color-coded track segments:** each observed segment is colored by wind force for quick intensity comparison.
+- 🟡 **Golden dashed forecast line:** renders available CMA forecast points as a separate dashed path.
+- 🕒 **Beijing-time conversion:** converts source timestamps from UTC to Beijing Time (UTC+8).
+- 🖱️ **Interactive, touch-friendly points:** larger transparent hit areas make observed and forecast nodes easier to select.
+- 🔄 **Controlled refresh lifecycle:** only one CMA refresh request stays active; closing the plugin cancels it and removes the plugin's own map listener and layers.
 
-## 🚀 How to Use in Windy.com
+## Screenshot
 
-1. Open [Windy.com](https://www.windy.com).
-2. Open the right side panel -> **Plugins**.
-3. Search for `cma-typhoon` and click to load!
+![Plugin screenshot](src/screenshot.jpg)
 
-## 📄 License
+## Installation status
+
+This plugin is being prepared for Windy review. The official `publish-plugin` GitHub Actions workflow produces an installation URL after a version is uploaded. After Windy approves and lists the plugin, it can also be found from Windy's Plugins panel.
+
+For local development, follow Windy's plugin-development setup and load this repository in developer mode.
+
+## Development
+
+```bash
+npm install
+npm run start
+```
+
+Create the distributable files in `dist/` with:
+
+```bash
+npm run build
+```
+
+The plugin is read-only with respect to CMA: it requests public track data and does not submit data to the source service.
+
+## License
 
 [MIT License](LICENSE) © 2026

@@ -1,20 +1,12 @@
 {
     "name": "windy-plugin-cma-typhoon",
-    "version": "1.0.0",
-    "description": "Windy plugin for tracking typhoon with CMA data, 18-level Beaufort scale and color-coded tracks",
+    "version": "1.0.1",
+    "description": "Windy plugin for CMA typhoon tracks using the GB/T 28591-2012 wind scale and a labeled extended Level 18",
     "main": "dist/plugin.min.js",
     "type": "module",
     "scripts": {
         "build": "node scripts/build.js",
         "start": "npx rollup -w -c",
-        "example01": "CONFIG=example01 rollup -w -c",
-        "example02": "CONFIG=example02 rollup -w -c",
-        "example03": "CONFIG=example03 rollup -w -c",
-        "example04": "CONFIG=example04 rollup -w -c",
-        "example05": "CONFIG=example05 rollup -w -c",
-        "example06": "CONFIG=example06 rollup -w -c",
-        "example07": "CONFIG=example07 rollup -w -c",
-        "build:all-examples": "for number in 01 02 03 04 05 06; do CONFIG=example$number SERVE=false rollup -c; done",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "repository": {
@@ -24,10 +16,12 @@
     "keywords": [
         "windy",
         "windy.com",
-        "plugins"
+        "plugins",
+        "typhoon",
+        "cma"
     ],
     "author": "jianghanzhi2006-dotcom",
-    "license": "ISC",
+    "license": "MIT",
     "bugs": {
         "url": "https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon/issues"
     },
