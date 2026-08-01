@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785583832318,
-  "builtReadable": "2026-08-01T11:30:32.318Z",
+  "built": 1785586623868,
+  "builtReadable": "2026-08-01T12:17:03.868Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -746,6 +746,38 @@ function create_if_block(ctx) {
 	};
 }
 
+// (118:70) {#if pt.bft.qualifier}
+function create_if_block_1(ctx) {
+	let span;
+	let t_value = /*pt*/ ctx[21].bft.qualifier + "";
+	let t;
+
+	return {
+		c() {
+			span = element("span");
+			t = text(t_value);
+			set_style(span, "font-size", "10px");
+			set_style(span, "margin-left", "4px");
+			set_style(span, "padding", "0 3px");
+			set_style(span, "border", "1px solid currentColor");
+			set_style(span, "border-radius", "3px");
+			set_style(span, "opacity", "0.9");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+			append(span, t);
+		},
+		p(ctx, dirty) {
+			if (dirty & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[21].bft.qualifier + "")) set_data(t, t_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
 // (79:32) {#each item.historyPoints as pt, idx}
 function create_each_block_1(ctx) {
 	let div3;
@@ -773,6 +805,7 @@ function create_each_block_1(ctx) {
 	let t10;
 	let mounted;
 	let dispose;
+	let if_block = /*pt*/ ctx[21].bft.qualifier && create_if_block_1(ctx);
 
 	function click_handler_1() {
 		return /*click_handler_1*/ ctx[9](/*pt*/ ctx[21]);
@@ -798,6 +831,7 @@ function create_each_block_1(ctx) {
 			t7 = text("(");
 			t8 = text(t8_value);
 			t9 = text("m/s)");
+			if (if_block) if_block.c();
 			t10 = space();
 			set_style(span0, "color", /*idx*/ ctx[23] === 0 ? '#40a9ff' : '#ffffff');
 			set_style(span0, "font-weight", /*idx*/ ctx[23] === 0 ? 'bold' : 'normal');
@@ -808,10 +842,12 @@ function create_each_block_1(ctx) {
 			set_style(span1, "font-size", "12px");
 			set_style(span2, "font-size", "13px");
 			set_style(span2, "line-height", "1.2");
+			set_style(span2, "white-space", "nowrap");
 			set_style(span3, "font-size", "12px");
 			set_style(span3, "line-height", "1.2");
 			set_style(span3, "opacity", "0.95");
 			set_style(span3, "margin-top", "2px");
+			set_style(span3, "white-space", "nowrap");
 			set_style(div1, "background", /*pt*/ ctx[21].bft.color);
 			set_style(div1, "color", /*pt*/ ctx[21].bft.textColor);
 			set_style(div1, "padding", "4px 10px");
@@ -870,6 +906,7 @@ function create_each_block_1(ctx) {
 			append(span3, t7);
 			append(span3, t8);
 			append(span3, t9);
+			if (if_block) if_block.m(span3, null);
 			append(div3, t10);
 
 			if (!mounted) {
@@ -883,6 +920,19 @@ function create_each_block_1(ctx) {
 			if (dirty & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[21].pressure + "")) set_data(t2, t2_value);
 			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*pt*/ ctx[21].bft.text + "")) set_data(t5, t5_value);
 			if (dirty & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[21].speedMs + "")) set_data(t8, t8_value);
+
+			if (/*pt*/ ctx[21].bft.qualifier) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block_1(ctx);
+					if_block.c();
+					if_block.m(span3, null);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
 				set_style(div1, "background", /*pt*/ ctx[21].bft.color);
@@ -903,6 +953,7 @@ function create_each_block_1(ctx) {
 				detach(div3);
 			}
 
+			if (if_block) if_block.d();
 			mounted = false;
 			dispose();
 		}
@@ -1409,10 +1460,17 @@ function getBeaufort(ms) {
 	}
 
 	return {
-		text: '18级（扩展）超强台风',
+		text: '18级超强台风',
+		qualifier: '扩展',
 		color: '#120338',
 		textColor: '#FFFFFF'
 	};
+}
+
+function getBeaufortPopupText(bft) {
+	return bft.qualifier
+	? `${bft.text}（${bft.qualifier}显示）`
+	: bft.text;
 }
 
 function formatCleanTime(str) {
@@ -1546,7 +1604,7 @@ function instance($$self, $$props, $$invalidate) {
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                     <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
                     <b>📍 时间</b>：${formattedT}<br/>
-                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
                     <b>📉 中心气压</b>：${pressure} hPa<br/>
                     <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                 </div>
@@ -1617,7 +1675,7 @@ function instance($$self, $$props, $$invalidate) {
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                             <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
                             <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
-                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
                             <b>📉 预测中心气压</b>：${pressure} hPa<br/>
                             <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                         </div>

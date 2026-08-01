@@ -109,12 +109,16 @@
                                                     ? '0 1px 2px rgba(0,0,0,0.8)'
                                                     : 'none'}; min-width: 110px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;"
                                             >
-                                                <span style="font-size: 13px; line-height: 1.2;"
+                                                <span
+                                                    style="font-size: 13px; line-height: 1.2; white-space: nowrap;"
                                                     >{pt.bft.text}</span
                                                 >
                                                 <span
-                                                    style="font-size: 12px; line-height: 1.2; opacity: 0.95; margin-top: 2px;"
-                                                    >({pt.speedMs}m/s)</span
+                                                    style="font-size: 12px; line-height: 1.2; opacity: 0.95; margin-top: 2px; white-space: nowrap;"
+                                                    >({pt.speedMs}m/s){#if pt.bft.qualifier}<span
+                                                            style="font-size: 10px; margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; opacity: 0.9;"
+                                                            >{pt.bft.qualifier}</span
+                                                        >{/if}</span
                                                 >
                                             </div>
                                         </div>
@@ -211,7 +215,14 @@
               );
     }
 
-    function getBeaufort(ms: number) {
+    type BeaufortInfo = {
+        text: string;
+        color: string;
+        textColor: string;
+        qualifier?: string;
+    };
+
+    function getBeaufort(ms: number): BeaufortInfo {
         if (ms < 0.3) {
             return { text: '0级无风', color: '#E8E8E8', textColor: '#000000' };
         }
@@ -269,7 +280,16 @@
         // GB/T 28591-2012 ends at Level 17 (>=56.1 m/s). We retain this
         // explicitly labelled extension to make exceptionally high winds easier
         // to distinguish; it is a display convention, not a separate GB/T grade.
-        return { text: '18级（扩展）超强台风', color: '#120338', textColor: '#FFFFFF' };
+        return {
+            text: '18级超强台风',
+            qualifier: '扩展',
+            color: '#120338',
+            textColor: '#FFFFFF',
+        };
+    }
+
+    function getBeaufortPopupText(bft: BeaufortInfo) {
+        return bft.qualifier ? `${bft.text}（${bft.qualifier}显示）` : bft.text;
     }
 
     function formatCleanTime(str: string) {
@@ -372,7 +392,7 @@
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                     <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
                     <b>📍 时间</b>：${formattedT}<br/>
-                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
                     <b>📉 中心气压</b>：${pressure} hPa<br/>
                     <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                 </div>
@@ -451,7 +471,7 @@
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                             <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
                             <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
-                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
                             <b>📉 预测中心气压</b>：${pressure} hPa<br/>
                             <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                         </div>
