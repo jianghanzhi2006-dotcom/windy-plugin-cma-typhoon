@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785635329037,
-  "builtReadable": "2026-08-02T01:48:49.037Z",
+  "built": 1785637900368,
+  "builtReadable": "2026-08-02T02:31:40.368Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -826,7 +826,7 @@ function create_if_block_1(ctx) {
 	};
 }
 
-// (145:74) {#if pt.bft.qualifier}
+// (157:70) {#if pt.bft.qualifier}
 function create_if_block_2(ctx) {
 	let span;
 	let t_value = /*pt*/ ctx[25].bft.qualifier + "";
@@ -863,26 +863,31 @@ function create_each_block_1(ctx) {
 	let div3;
 	let div0;
 	let span0;
-	let t0_value = /*pt*/ ctx[25].formatTime + "";
+	let t0_value = /*pt*/ ctx[25].displayDate + "";
 	let t0;
 	let t1;
-	let div2;
 	let span1;
-	let t2_value = /*pt*/ ctx[25].pressure + "";
+	let t2_value = /*pt*/ ctx[25].displayTime + "";
 	let t2;
 	let t3;
-	let t4;
 	let div1;
 	let span2;
-	let t5_value = /*pt*/ ctx[25].bft.text + "";
+	let t4_value = /*pt*/ ctx[25].pressure + "";
+	let t4;
 	let t5;
-	let t6;
 	let span3;
 	let t7;
-	let t8_value = /*pt*/ ctx[25].speedMs + "";
+	let div2;
+	let span4;
+	let t8_value = /*pt*/ ctx[25].bft.text + "";
 	let t8;
 	let t9;
+	let span5;
 	let t10;
+	let t11_value = /*pt*/ ctx[25].speedMs + "";
+	let t11;
+	let t12;
+	let t13;
 	let mounted;
 	let dispose;
 	let if_block = /*pt*/ ctx[25].bft.qualifier && create_if_block_2(ctx);
@@ -898,61 +903,82 @@ function create_each_block_1(ctx) {
 			span0 = element("span");
 			t0 = text(t0_value);
 			t1 = space();
-			div2 = element("div");
 			span1 = element("span");
 			t2 = text(t2_value);
-			t3 = text(" hPa");
-			t4 = space();
+			t3 = space();
 			div1 = element("div");
 			span2 = element("span");
-			t5 = text(t5_value);
-			t6 = space();
+			t4 = text(t4_value);
+			t5 = space();
 			span3 = element("span");
-			t7 = text("(");
+			span3.textContent = "hPa";
+			t7 = space();
+			div2 = element("div");
+			span4 = element("span");
 			t8 = text(t8_value);
-			t9 = text("m/s)");
+			t9 = space();
+			span5 = element("span");
+			t10 = text("(");
+			t11 = text(t11_value);
+			t12 = text("m/s)");
 			if (if_block) if_block.c();
-			t10 = space();
+			t13 = space();
 			set_style(span0, "color", /*idx*/ ctx[27] === 0 ? '#40a9ff' : '#ffffff');
 			set_style(span0, "font-weight", /*idx*/ ctx[27] === 0 ? 'bold' : 'normal');
+			set_style(span0, "white-space", "nowrap");
+			set_style(span1, "color", /*idx*/ ctx[27] === 0 ? '#40a9ff' : '#ffffff');
+			set_style(span1, "font-weight", /*idx*/ ctx[27] === 0 ? 'bold' : 'normal');
+			set_style(span1, "white-space", "nowrap");
+			set_style(div0, "min-width", "0");
 			set_style(div0, "display", "flex");
-			set_style(div0, "align-items", "center");
-			set_style(div0, "gap", "8px");
-			set_style(span1, "color", "#aaa");
-			set_style(span1, "font-size", "12px");
-			set_style(span2, "font-size", "13px");
-			set_style(span2, "line-height", "1.2");
+			set_style(div0, "flex-direction", "column");
+			set_style(div0, "align-items", "flex-start");
+			set_style(div0, "line-height", "1.25");
+			set_style(div0, "font-variant-numeric", "tabular-nums");
 			set_style(span2, "white-space", "nowrap");
-			set_style(span3, "font-size", "12px");
-			set_style(span3, "line-height", "1.2");
-			set_style(span3, "opacity", "0.95");
-			set_style(span3, "margin-top", "2px");
 			set_style(span3, "white-space", "nowrap");
-			set_style(div1, "background", /*pt*/ ctx[25].bft.color);
-			set_style(div1, "color", /*pt*/ ctx[25].bft.textColor);
-			set_style(div1, "padding", "4px 10px");
-			set_style(div1, "border-radius", "6px");
-			set_style(div1, "font-weight", "bold");
+			set_style(div1, "min-width", "0");
+			set_style(div1, "display", "flex");
+			set_style(div1, "flex-direction", "column");
+			set_style(div1, "align-items", "flex-start");
+			set_style(div1, "color", "#aaa");
+			set_style(div1, "font-size", "12px");
+			set_style(div1, "line-height", "1.25");
+			set_style(div1, "font-variant-numeric", "tabular-nums");
+			set_style(span4, "font-size", "13px");
+			set_style(span4, "line-height", "1.2");
+			set_style(span4, "white-space", "nowrap");
+			set_style(span5, "font-size", "12px");
+			set_style(span5, "line-height", "1.2");
+			set_style(span5, "opacity", "0.95");
+			set_style(span5, "margin-top", "2px");
+			set_style(span5, "white-space", "nowrap");
+			set_style(div2, "box-sizing", "border-box");
+			set_style(div2, "width", "100%");
+			set_style(div2, "min-width", "0");
+			set_style(div2, "background", /*pt*/ ctx[25].bft.color);
+			set_style(div2, "color", /*pt*/ ctx[25].bft.textColor);
+			set_style(div2, "padding", "4px 6px");
+			set_style(div2, "border-radius", "6px");
+			set_style(div2, "font-weight", "bold");
 
-			set_style(div1, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
+			set_style(div2, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
 			? '0 1px 2px rgba(0,0,0,0.8)'
 			: 'none');
 
-			set_style(div1, "min-width", "110px");
-			set_style(div1, "text-align", "center");
-			set_style(div1, "display", "flex");
-			set_style(div1, "flex-direction", "column");
-			set_style(div1, "align-items", "center");
-			set_style(div1, "justify-content", "center");
+			set_style(div2, "text-align", "center");
 			set_style(div2, "display", "flex");
+			set_style(div2, "flex-direction", "column");
 			set_style(div2, "align-items", "center");
-			set_style(div2, "gap", "10px");
+			set_style(div2, "justify-content", "center");
 			set_style(div3, "background", /*idx*/ ctx[27] === 0 ? '#132738' : '#262626');
 			set_style(div3, "border-radius", "6px");
 			set_style(div3, "padding", "8px 12px");
 			set_style(div3, "margin-bottom", "6px");
 			set_style(div3, "font-size", "13px");
-			set_style(div3, "display", "flex");
+			set_style(div3, "display", "grid");
+			set_style(div3, "grid-template-columns", "64px 48px minmax(108px, 126px)");
+			set_style(div3, "column-gap", "8px");
 			set_style(div3, "justify-content", "space-between");
 			set_style(div3, "align-items", "center");
 			set_style(div3, "cursor", "pointer");
@@ -972,22 +998,26 @@ function create_each_block_1(ctx) {
 			append(div3, div0);
 			append(div0, span0);
 			append(span0, t0);
-			append(div3, t1);
-			append(div3, div2);
-			append(div2, span1);
+			append(div0, t1);
+			append(div0, span1);
 			append(span1, t2);
-			append(span1, t3);
-			append(div2, t4);
-			append(div2, div1);
+			append(div3, t3);
+			append(div3, div1);
 			append(div1, span2);
-			append(span2, t5);
-			append(div1, t6);
+			append(span2, t4);
+			append(div1, t5);
 			append(div1, span3);
-			append(span3, t7);
-			append(span3, t8);
-			append(span3, t9);
-			if (if_block) if_block.m(span3, null);
-			append(div3, t10);
+			append(div3, t7);
+			append(div3, div2);
+			append(div2, span4);
+			append(span4, t8);
+			append(div2, t9);
+			append(div2, span5);
+			append(span5, t10);
+			append(span5, t11);
+			append(span5, t12);
+			if (if_block) if_block.m(span5, null);
+			append(div3, t13);
 
 			if (!mounted) {
 				dispose = listen(div3, "click", click_handler_2);
@@ -996,10 +1026,11 @@ function create_each_block_1(ctx) {
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
-			if (dirty & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[25].formatTime + "")) set_data(t0, t0_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[25].pressure + "")) set_data(t2, t2_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*pt*/ ctx[25].bft.text + "")) set_data(t5, t5_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[25].speedMs + "")) set_data(t8, t8_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[25].displayDate + "")) set_data(t0, t0_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[25].displayTime + "")) set_data(t2, t2_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t4_value !== (t4_value = /*pt*/ ctx[25].pressure + "")) set_data(t4, t4_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[25].bft.text + "")) set_data(t8, t8_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t11_value !== (t11_value = /*pt*/ ctx[25].speedMs + "")) set_data(t11, t11_value);
 
 			if (/*pt*/ ctx[25].bft.qualifier) {
 				if (if_block) {
@@ -1007,7 +1038,7 @@ function create_each_block_1(ctx) {
 				} else {
 					if_block = create_if_block_2(ctx);
 					if_block.c();
-					if_block.m(span3, null);
+					if_block.m(span5, null);
 				}
 			} else if (if_block) {
 				if_block.d(1);
@@ -1015,15 +1046,15 @@ function create_each_block_1(ctx) {
 			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div1, "background", /*pt*/ ctx[25].bft.color);
+				set_style(div2, "background", /*pt*/ ctx[25].bft.color);
 			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div1, "color", /*pt*/ ctx[25].bft.textColor);
+				set_style(div2, "color", /*pt*/ ctx[25].bft.textColor);
 			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div1, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
+				set_style(div2, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
 				? '0 1px 2px rgba(0,0,0,0.8)'
 				: 'none');
 			}
@@ -1771,6 +1802,7 @@ function instance($$self, $$props, $$invalidate) {
 			const speedMs = p[7];
 			const bft = getBeaufort(speedMs);
 			const formattedT = formatCleanTime(timeStr);
+			const [displayDate = formattedT, displayTime = ''] = formattedT.split(/\s+/, 2);
 			realSegments.push({ latlng: [lat, lng], color: bft.color });
 
 			const popupHtml = `
@@ -1811,6 +1843,8 @@ function instance($$self, $$props, $$invalidate) {
 				lng,
 				timeStr,
 				formatTime: formattedT,
+				displayDate,
+				displayTime,
 				pressure,
 				speedMs,
 				bft,

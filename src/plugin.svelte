@@ -103,7 +103,7 @@
                                             on:click={() => focusPoint(pt)}
                                             style="background: {idx === 0
                                                 ? '#132738'
-                                                : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: {idx ===
+                                                : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: grid; grid-template-columns: 64px 48px minmax(108px, 126px); column-gap: 8px; justify-content: space-between; align-items: center; cursor: pointer; border: {idx ===
                                             0
                                                 ? '1.5px solid #1890ff'
                                                 : '1px solid #383838'}; box-shadow: {idx === 0
@@ -111,43 +111,54 @@
                                                 : 'none'}; transition: all 0.2s;"
                                         >
                                             <div
-                                                style="display: flex; align-items: center; gap: 8px;"
+                                                style="min-width: 0; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; font-variant-numeric: tabular-nums;"
                                             >
                                                 <span
                                                     style="color: {idx === 0
                                                         ? '#40a9ff'
                                                         : '#ffffff'}; font-weight: {idx === 0
                                                         ? 'bold'
-                                                        : 'normal'};">{pt.formatTime}</span
+                                                        : 'normal'}; white-space: nowrap;"
+                                                    >{pt.displayDate}</span
+                                                >
+                                                <span
+                                                    style="color: {idx === 0
+                                                        ? '#40a9ff'
+                                                        : '#ffffff'}; font-weight: {idx === 0
+                                                        ? 'bold'
+                                                        : 'normal'}; white-space: nowrap;"
+                                                    >{pt.displayTime}</span
                                                 >
                                             </div>
 
                                             <div
-                                                style="display: flex; align-items: center; gap: 10px;"
+                                                style="min-width: 0; display: flex; flex-direction: column; align-items: flex-start; color: #aaa; font-size: 12px; line-height: 1.25; font-variant-numeric: tabular-nums;"
                                             >
-                                                <span style="color: #aaa; font-size: 12px;"
-                                                    >{pt.pressure} hPa</span
+                                                <span style="white-space: nowrap;"
+                                                    >{pt.pressure}</span
                                                 >
-                                                <div
-                                                    style="background: {pt.bft.color}; color: {pt
-                                                        .bft
-                                                        .textColor}; padding: 4px 10px; border-radius: 6px; font-weight: bold; text-shadow: {pt
-                                                        .bft.textColor === '#ffffff'
-                                                        ? '0 1px 2px rgba(0,0,0,0.8)'
-                                                        : 'none'}; min-width: 110px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;"
+                                                <span style="white-space: nowrap;">hPa</span>
+                                            </div>
+
+                                            <div
+                                                style="box-sizing: border-box; width: 100%; min-width: 0; background: {pt
+                                                    .bft.color}; color: {pt.bft
+                                                    .textColor}; padding: 4px 6px; border-radius: 6px; font-weight: bold; text-shadow: {pt
+                                                    .bft.textColor === '#ffffff'
+                                                    ? '0 1px 2px rgba(0,0,0,0.8)'
+                                                    : 'none'}; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;"
+                                            >
+                                                <span
+                                                    style="font-size: 13px; line-height: 1.2; white-space: nowrap;"
+                                                    >{pt.bft.text}</span
                                                 >
-                                                    <span
-                                                        style="font-size: 13px; line-height: 1.2; white-space: nowrap;"
-                                                        >{pt.bft.text}</span
-                                                    >
-                                                    <span
-                                                        style="font-size: 12px; line-height: 1.2; opacity: 0.95; margin-top: 2px; white-space: nowrap;"
-                                                        >({pt.speedMs}m/s){#if pt.bft.qualifier}<span
-                                                                style="font-size: 10px; margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; opacity: 0.9;"
-                                                                >{pt.bft.qualifier}</span
-                                                            >{/if}</span
-                                                    >
-                                                </div>
+                                                <span
+                                                    style="font-size: 12px; line-height: 1.2; opacity: 0.95; margin-top: 2px; white-space: nowrap;"
+                                                    >({pt.speedMs}m/s){#if pt.bft.qualifier}<span
+                                                            style="font-size: 10px; margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; opacity: 0.9;"
+                                                            >{pt.bft.qualifier}</span
+                                                        >{/if}</span
+                                                >
                                             </div>
                                         </div>
                                     {/each}
@@ -460,6 +471,7 @@
             const speedMs = p[7];
             const bft = getBeaufort(speedMs);
             const formattedT = formatCleanTime(timeStr);
+            const [displayDate = formattedT, displayTime = ''] = formattedT.split(/\s+/, 2);
 
             realSegments.push({ latlng: [lat, lng], color: bft.color });
 
@@ -501,6 +513,8 @@
                 lng,
                 timeStr,
                 formatTime: formattedT,
+                displayDate,
+                displayTime,
                 pressure,
                 speedMs,
                 bft,
