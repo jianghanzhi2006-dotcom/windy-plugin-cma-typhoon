@@ -20,9 +20,9 @@
             >
             <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">
                 数据来源：CMA 官方接口 (typhoon.nmc.cn)<br />
-                风力标准：GB/T 28591-2012（0–17级，2分钟平均风速）<br />
+                风力级数：GB/T 28591-2012（0–17级）<br />
                 扩展显示：风速 &gt; 61.2 m/s 时标记为“18级（扩展）”<br />
-                气旋等级：GB/T 19201-2006（热带低压至超强台风）<br />
+                气旋等级：GB/T 19201-2006（2分钟平均风）<br />
                 轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)
             </p>
         </div>
@@ -54,60 +54,99 @@
                     <div
                         style="background: #1e1e1e; border-radius: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid #3a3a3a; box-shadow: 0 2px 6px rgba(0,0,0,0.4);"
                     >
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 6px;"
+                        <button
+                            type="button"
+                            on:click={() => toggleTyphoonPanel(item.id)}
+                            aria-expanded={expandedTyphoonId === item.id}
+                            style="width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 0 {expandedTyphoonId ===
+                            item.id
+                                ? '6px'
+                                : '0'}; margin: 0 0 {expandedTyphoonId === item.id
+                                ? '8px'
+                                : '0'}; border: none; border-bottom: {expandedTyphoonId === item.id
+                                ? '1px solid #333'
+                                : 'none'}; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit;"
                         >
                             <strong style="color: #69c0ff; font-size: 15px;"
                                 >🌀 {item.no} {item.nameCn} ({item.nameEn})</strong
                             >
                             <span
-                                style="background: {item.status === '进行中'
-                                    ? '#275017'
-                                    : '#434343'}; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;"
+                                style="display: flex; align-items: center; gap: 7px; flex-shrink: 0;"
                             >
-                                ● {item.status}
+                                <span
+                                    style="background: {item.status === '进行中'
+                                        ? '#275017'
+                                        : '#434343'}; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;"
+                                >
+                                    ● {item.status}
+                                </span>
+                                <span
+                                    aria-hidden="true"
+                                    style="color: #bfbfbf; font-size: 12px; line-height: 1; width: 12px; text-align: center;"
+                                    >{expandedTyphoonId === item.id ? '▼' : '▶'}</span
+                                >
                             </span>
-                        </div>
+                        </button>
 
-                        <div style="margin-top: 8px;">
-                            <div
-                                style="font-size: 12px; color: #8c8c8c; margin-bottom: 8px; font-weight: bold;"
-                            >
-                                📜 全程风力演变轨迹（最新在顶部，点击直达）：
-                            </div>
-                            <div style="max-height: 520px; overflow-y: auto; padding-right: 4px;">
-                                {#each item.historyPoints as pt, idx}
-                                    <div
-                                        on:click={() => focusPoint(pt)}
-                                        style="background: {idx === 0
-                                            ? '#132738'
-                                            : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: {idx ===
-                                        0
-                                            ? '1.5px solid #1890ff'
-                                            : '1px solid #383838'}; box-shadow: {idx === 0
-                                            ? '0 0 8px rgba(24,144,255,0.35)'
-                                            : 'none'}; transition: all 0.2s;"
-                                    >
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span
-                                                style="color: {idx === 0
-                                                    ? '#40a9ff'
-                                                    : '#ffffff'}; font-weight: {idx === 0
-                                                    ? 'bold'
-                                                    : 'normal'};">{pt.formatTime}</span
-                                            >
-                                        </div>
-
-                                        <div style="display: flex; align-items: center; gap: 10px;">
-                                            <span style="color: #aaa; font-size: 12px;"
-                                                >{pt.pressure} hPa</span
-                                            >
+                        {#if expandedTyphoonId === item.id}
+                            <div style="margin-top: 8px;">
+                                <div
+                                    style="font-size: 12px; color: #8c8c8c; margin-bottom: 8px; font-weight: bold;"
+                                >
+                                    📜 全程风力演变轨迹（最新在顶部，点击直达）：
+                                </div>
+                                <div
+                                    style="max-height: 520px; overflow-y: auto; padding-right: 4px;"
+                                >
+                                    {#each item.historyPoints as pt, idx}
+                                        <div
+                                            on:click={() => focusPoint(pt)}
+                                            style="background: {idx === 0
+                                                ? '#132738'
+                                                : '#262626'}; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; display: grid; grid-template-columns: 64px 48px minmax(108px, 126px); column-gap: 8px; justify-content: space-between; align-items: center; cursor: pointer; border: {idx ===
+                                            0
+                                                ? '1.5px solid #1890ff'
+                                                : '1px solid #383838'}; box-shadow: {idx === 0
+                                                ? '0 0 8px rgba(24,144,255,0.35)'
+                                                : 'none'}; transition: all 0.2s;"
+                                        >
                                             <div
-                                                style="background: {pt.bft.color}; color: {pt.bft
-                                                    .textColor}; padding: 4px 10px; border-radius: 6px; font-weight: bold; text-shadow: {pt
+                                                style="min-width: 0; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; font-variant-numeric: tabular-nums;"
+                                            >
+                                                <span
+                                                    style="color: {idx === 0
+                                                        ? '#40a9ff'
+                                                        : '#ffffff'}; font-weight: {idx === 0
+                                                        ? 'bold'
+                                                        : 'normal'}; white-space: nowrap;"
+                                                    >{pt.displayDate}</span
+                                                >
+                                                <span
+                                                    style="color: {idx === 0
+                                                        ? '#40a9ff'
+                                                        : '#ffffff'}; font-weight: {idx === 0
+                                                        ? 'bold'
+                                                        : 'normal'}; white-space: nowrap;"
+                                                    >{pt.displayTime}</span
+                                                >
+                                            </div>
+
+                                            <div
+                                                style="min-width: 0; display: flex; flex-direction: column; align-items: flex-start; color: #aaa; font-size: 12px; line-height: 1.25; font-variant-numeric: tabular-nums;"
+                                            >
+                                                <span style="white-space: nowrap;"
+                                                    >{pt.pressure}</span
+                                                >
+                                                <span style="white-space: nowrap;">hPa</span>
+                                            </div>
+
+                                            <div
+                                                style="box-sizing: border-box; width: 100%; min-width: 0; background: {pt
+                                                    .bft.color}; color: {pt.bft
+                                                    .textColor}; padding: 4px 6px; border-radius: 6px; font-weight: bold; text-shadow: {pt
                                                     .bft.textColor === '#ffffff'
                                                     ? '0 1px 2px rgba(0,0,0,0.8)'
-                                                    : 'none'}; min-width: 110px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;"
+                                                    : 'none'}; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;"
                                             >
                                                 <span
                                                     style="font-size: 13px; line-height: 1.2; white-space: nowrap;"
@@ -122,10 +161,10 @@
                                                 >
                                             </div>
                                         </div>
-                                    </div>
-                                {/each}
+                                    {/each}
+                                </div>
                             </div>
-                        </div>
+                        {/if}
                     </div>
                 {/each}
             </div>
@@ -138,6 +177,14 @@
     import { map } from '@windy/map';
     import { onDestroy, onMount } from 'svelte';
     import config from './pluginConfig';
+    import {
+        findStrongestTyphoon,
+        formatCleanTime,
+        formatForecastTime,
+        getBeaufort,
+        parseJsonpPayload,
+        splitDisplayTime,
+    } from './typhoonLogic';
 
     const { title } = config;
 
@@ -147,6 +194,7 @@
     let activeRequest: AbortController | null = null;
     let requestSequence = 0;
     let isLoading = false;
+    let expandedTyphoonId: string | number | null = null;
 
     const handleMapClick = () => {
         map.closePopup();
@@ -190,20 +238,6 @@
         return response.text();
     }
 
-    function parseJsonp(text: string, label: string) {
-        const start = text.indexOf('(');
-        const end = text.lastIndexOf(')');
-        if (start < 0 || end <= start + 1) {
-            throw new Error(`${label}返回格式异常`);
-        }
-
-        try {
-            return JSON.parse(text.slice(start + 1, end));
-        } catch {
-            throw new Error(`${label}返回内容不是有效 JSON`);
-        }
-    }
-
     function isAbortError(error: unknown) {
         return error instanceof DOMException
             ? error.name === 'AbortError'
@@ -213,131 +247,6 @@
                   'name' in error &&
                   error.name === 'AbortError',
               );
-    }
-
-    type BeaufortInfo = {
-        text: string;
-        color: string;
-        textColor: string;
-        qualifier?: string;
-    };
-
-    function getBeaufort(ms: number): BeaufortInfo {
-        if (ms < 0.3) {
-            return { text: '0级无风', color: '#E8E8E8', textColor: '#000000' };
-        }
-        if (ms <= 1.5) {
-            return { text: '1级软风', color: '#B5F5EC', textColor: '#000000' };
-        }
-        if (ms <= 3.3) {
-            return { text: '2级轻风', color: '#87E8DE', textColor: '#000000' };
-        }
-        if (ms <= 5.4) {
-            return { text: '3级微风', color: '#5CDBD3', textColor: '#000000' };
-        }
-        if (ms <= 7.9) {
-            return { text: '4级和风', color: '#95DE64', textColor: '#000000' };
-        }
-        if (ms <= 10.7) {
-            return { text: '5级清风', color: '#73D13D', textColor: '#000000' };
-        }
-        if (ms <= 13.8) {
-            return { text: '6级强风', color: '#389E0D', textColor: '#FFFFFF' };
-        }
-        if (ms <= 17.1) {
-            return { text: '7级劲风', color: '#FADB14', textColor: '#000000' };
-        }
-        if (ms <= 20.7) {
-            return { text: '8级热带低压', color: '#FA8C16', textColor: '#FFFFFF' };
-        }
-        if (ms <= 24.4) {
-            return { text: '9级热带风暴', color: '#ED571A', textColor: '#FFFFFF' };
-        }
-        if (ms <= 28.4) {
-            return { text: '10级强热带风暴', color: '#CF1322', textColor: '#FFFFFF' };
-        }
-        if (ms <= 32.6) {
-            return { text: '11级暴风', color: '#A8071A', textColor: '#FFFFFF' };
-        }
-        if (ms <= 36.9) {
-            return { text: '12级台风', color: '#C41D7F', textColor: '#FFFFFF' };
-        }
-        if (ms <= 41.4) {
-            return { text: '13级台风', color: '#9E1068', textColor: '#FFFFFF' };
-        }
-        if (ms <= 46.1) {
-            return { text: '14级强台风', color: '#722ED1', textColor: '#FFFFFF' };
-        }
-        if (ms <= 50.9) {
-            return { text: '15级强台风', color: '#531DAB', textColor: '#FFFFFF' };
-        }
-        if (ms <= 56.0) {
-            return { text: '16级超强台风', color: '#391085', textColor: '#FFFFFF' };
-        }
-        if (ms <= 61.2) {
-            return { text: '17级超强台风', color: '#230759', textColor: '#FFFFFF' };
-        }
-        // GB/T 28591-2012 ends at Level 17 (>=56.1 m/s). We retain this
-        // explicitly labelled extension to make exceptionally high winds easier
-        // to distinguish; it is a display convention, not a separate GB/T grade.
-        return {
-            text: '18级超强台风',
-            qualifier: '扩展',
-            color: '#120338',
-            textColor: '#FFFFFF',
-        };
-    }
-
-    function getBeaufortPopupText(bft: BeaufortInfo) {
-        return bft.qualifier ? `${bft.text}（${bft.qualifier}显示）` : bft.text;
-    }
-
-    function formatCleanTime(str: string) {
-        if (!str || str.length < 12) {
-            return str;
-        }
-        try {
-            const y = parseInt(str.substring(0, 4), 10);
-            const m = parseInt(str.substring(4, 6), 10) - 1;
-            const d = parseInt(str.substring(6, 8), 10);
-            const h = parseInt(str.substring(8, 10), 10);
-
-            const utcDate = new Date(Date.UTC(y, m, d, h, 0, 0));
-            const bjTimeMs = utcDate.getTime() + 8 * 3600 * 1000;
-            const bjDate = new Date(bjTimeMs);
-
-            const bjM = String(bjDate.getUTCMonth() + 1).padStart(2, '0');
-            const bjD = String(bjDate.getUTCDate()).padStart(2, '0');
-            const bjH = String(bjDate.getUTCHours()).padStart(2, '0');
-
-            return `${bjM}-${bjD} ${bjH}:00`;
-        } catch (e) {
-            return str;
-        }
-    }
-
-    function formatForecastTime(baseStr: string, fcHours: number) {
-        if (!baseStr || baseStr.length < 12) {
-            return baseStr;
-        }
-        try {
-            const y = parseInt(baseStr.substring(0, 4), 10);
-            const m = parseInt(baseStr.substring(4, 6), 10) - 1;
-            const d = parseInt(baseStr.substring(6, 8), 10);
-            const h = parseInt(baseStr.substring(8, 10), 10);
-
-            const utcDate = new Date(Date.UTC(y, m, d, h, 0, 0));
-            const targetMs = utcDate.getTime() + fcHours * 3600 * 1000 + 8 * 3600 * 1000;
-            const targetDate = new Date(targetMs);
-
-            const bjM = String(targetDate.getUTCMonth() + 1).padStart(2, '0');
-            const bjD = String(targetDate.getUTCDate()).padStart(2, '0');
-            const bjH = String(targetDate.getUTCHours()).padStart(2, '0');
-
-            return `${bjM}-${bjD} ${bjH}:00`;
-        } catch (e) {
-            return baseStr;
-        }
     }
 
     export const onopen = (_params: unknown) => {
@@ -350,8 +259,26 @@
         cancelActiveRequest();
         releaseMapResources();
         typhoonListInfo = [];
+        expandedTyphoonId = null;
         statusText = '插件已关闭；重新打开后可刷新中央气象台实时数据。';
     };
+
+    function toggleTyphoonPanel(tfId: string | number) {
+        expandedTyphoonId = expandedTyphoonId === tfId ? null : tfId;
+    }
+
+    function selectAndFocusStrongestTyphoon() {
+        const strongest = findStrongestTyphoon(typhoonListInfo);
+
+        if (!strongest) {
+            expandedTyphoonId = null;
+            return;
+        }
+
+        expandedTyphoonId = strongest.id;
+        const strongestLatest = strongest.historyPoints[0];
+        map.flyTo([strongestLatest.lat, strongestLatest.lng], 5);
+    }
 
     function focusPoint(pt: any) {
         map.flyTo([pt.lat, pt.lng], 6);
@@ -385,6 +312,7 @@
             const speedMs = p[7];
             const bft = getBeaufort(speedMs);
             const formattedT = formatCleanTime(timeStr);
+            const { date: displayDate, time: displayTime } = splitDisplayTime(formattedT);
 
             realSegments.push({ latlng: [lat, lng], color: bft.color });
 
@@ -392,7 +320,7 @@
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                     <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
                     <b>📍 时间</b>：${formattedT}<br/>
-                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
                     <b>📉 中心气压</b>：${pressure} hPa<br/>
                     <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                 </div>
@@ -411,8 +339,8 @@
 
             const marker = window.L.circleMarker([lat, lng], {
                 radius: 4,
-                color: '#ffffff',
-                weight: 1.5,
+                stroke: false,
+                fill: true,
                 fillColor: bft.color,
                 fillOpacity: 1,
                 interactive: true,
@@ -426,6 +354,8 @@
                 lng,
                 timeStr,
                 formatTime: formattedT,
+                displayDate,
+                displayTime,
                 pressure,
                 speedMs,
                 bft,
@@ -471,7 +401,7 @@
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                             <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
                             <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
-                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
                             <b>📉 预测中心气压</b>：${pressure} hPa<br/>
                             <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                         </div>
@@ -523,9 +453,6 @@
                     historyPoints: reversedReal,
                 },
             ];
-
-            const latestPt = realSegments[realSegments.length - 1].latlng;
-            map.flyTo([latestPt[0], latestPt[1]], 5);
         }
     }
 
@@ -545,6 +472,7 @@
 
         statusText = '🌐 正在向中央气象台服务器 (typhoon.nmc.cn) 请求实时与预报数据...';
         typhoonListInfo = [];
+        expandedTyphoonId = null;
         let renderedCount = 0;
         let failedCount = 0;
 
@@ -557,7 +485,7 @@
                 return;
             }
 
-            const data = parseJsonp(text, '台风列表');
+            const data = parseJsonpPayload<any>(text, '台风列表');
             if (!Array.isArray(data?.typhoonList) || data.typhoonList.length === 0) {
                 statusText = '⚠️ 中央气象台当前没有可显示的台风数据。';
                 return;
@@ -589,7 +517,7 @@
                         return;
                     }
 
-                    const viewData = parseJsonp(viewText, `${tfNo} 台风详情`);
+                    const viewData = parseJsonpPayload<any>(viewText, `${tfNo} 台风详情`);
                     if (viewData && viewData.typhoon) {
                         renderTyphoonData(
                             tfId,
@@ -615,6 +543,7 @@
             if (controller.signal.aborted || requestId !== requestSequence) {
                 return;
             }
+            selectAndFocusStrongestTyphoon();
             statusText =
                 renderedCount > 0
                     ? `✅ 已绘制 ${renderedCount} 个台风的实况路径与金色预报虚线${failedCount > 0 ? `，${failedCount} 个详情请求失败` : ''}。`

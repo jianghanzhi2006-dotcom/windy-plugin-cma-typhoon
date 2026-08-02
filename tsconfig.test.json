@@ -1,0 +1,12 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "declaration": false,
+        "incremental": false,
+        "noEmit": false,
+        "outDir": ".tmp/tests",
+        "rootDir": "src",
+        "sourceMap": false
+    },
+    "include": ["src/typhoonLogic.ts"]
+}

@@ -3,18 +3,28 @@ name: publish-plugin
 on:
     workflow_dispatch:
 
+permissions:
+    contents: read
+
 jobs:
     publish-plugin:
         runs-on: ubuntu-latest
-        env:
-            WINDY_API_KEY: '${{ secrets.WINDY_API_KEY }}'
         steps:
             - uses: actions/checkout@v7
-            - name: Build
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+                  cache: npm
+            - name: Install locked dependencies
+              run: npm ci
+            - name: Test and build
               run: |
-                  npm install
+                  npm test
+                  npm run typecheck
                   npm run build
             - name: Publish Plugin
+              env:
+                  WINDY_API_KEY: '${{ secrets.WINDY_API_KEY }}'
               run: |
                   if [ -z "$WINDY_API_KEY" ]; then
                     echo "Secret WINDY_API_KEY is not configured" >&2
