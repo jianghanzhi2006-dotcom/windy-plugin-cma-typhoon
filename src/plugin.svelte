@@ -177,6 +177,14 @@
     import { map } from '@windy/map';
     import { onDestroy, onMount } from 'svelte';
     import config from './pluginConfig';
+    import {
+        findStrongestTyphoon,
+        formatCleanTime,
+        formatForecastTime,
+        getBeaufort,
+        parseJsonpPayload,
+        splitDisplayTime,
+    } from './typhoonLogic';
 
     const { title } = config;
 
@@ -230,20 +238,6 @@
         return response.text();
     }
 
-    function parseJsonp(text: string, label: string) {
-        const start = text.indexOf('(');
-        const end = text.lastIndexOf(')');
-        if (start < 0 || end <= start + 1) {
-            throw new Error(`${label}返回格式异常`);
-        }
-
-        try {
-            return JSON.parse(text.slice(start + 1, end));
-        } catch {
-            throw new Error(`${label}返回内容不是有效 JSON`);
-        }
-    }
-
     function isAbortError(error: unknown) {
         return error instanceof DOMException
             ? error.name === 'AbortError'
@@ -253,127 +247,6 @@
                   'name' in error &&
                   error.name === 'AbortError',
               );
-    }
-
-    type BeaufortInfo = {
-        text: string;
-        color: string;
-        textColor: string;
-        qualifier?: string;
-    };
-
-    function getBeaufort(ms: number): BeaufortInfo {
-        if (ms < 0.3) {
-            return { text: '0级无风', color: '#E8E8E8', textColor: '#000000' };
-        }
-        if (ms <= 1.5) {
-            return { text: '1级软风', color: '#B5F5EC', textColor: '#000000' };
-        }
-        if (ms <= 3.3) {
-            return { text: '2级轻风', color: '#87E8DE', textColor: '#000000' };
-        }
-        if (ms <= 5.4) {
-            return { text: '3级微风', color: '#5CDBD3', textColor: '#000000' };
-        }
-        if (ms <= 7.9) {
-            return { text: '4级和风', color: '#95DE64', textColor: '#000000' };
-        }
-        if (ms <= 10.7) {
-            return { text: '5级清风', color: '#73D13D', textColor: '#000000' };
-        }
-        if (ms <= 13.8) {
-            return { text: '6级热带低压', color: '#389E0D', textColor: '#FFFFFF' };
-        }
-        if (ms <= 17.1) {
-            return { text: '7级热带低压', color: '#FADB14', textColor: '#000000' };
-        }
-        if (ms <= 20.7) {
-            return { text: '8级热带风暴', color: '#FA8C16', textColor: '#FFFFFF' };
-        }
-        if (ms <= 24.4) {
-            return { text: '9级热带风暴', color: '#ED571A', textColor: '#FFFFFF' };
-        }
-        if (ms <= 28.4) {
-            return { text: '10级强热带风暴', color: '#CF1322', textColor: '#FFFFFF' };
-        }
-        if (ms <= 32.6) {
-            return { text: '11级强热带风暴', color: '#A8071A', textColor: '#FFFFFF' };
-        }
-        if (ms <= 36.9) {
-            return { text: '12级台风', color: '#C41D7F', textColor: '#FFFFFF' };
-        }
-        if (ms <= 41.4) {
-            return { text: '13级台风', color: '#9E1068', textColor: '#FFFFFF' };
-        }
-        if (ms <= 46.1) {
-            return { text: '14级强台风', color: '#722ED1', textColor: '#FFFFFF' };
-        }
-        if (ms <= 50.9) {
-            return { text: '15级强台风', color: '#531DAB', textColor: '#FFFFFF' };
-        }
-        if (ms <= 56.0) {
-            return { text: '16级超强台风', color: '#391085', textColor: '#FFFFFF' };
-        }
-        if (ms <= 61.2) {
-            return { text: '17级超强台风', color: '#230759', textColor: '#FFFFFF' };
-        }
-        // GB/T 28591-2012 ends at Level 17 (>=56.1 m/s). We retain this
-        // explicitly labelled extension to make exceptionally high winds easier
-        // to distinguish; it is a display convention, not a separate GB/T grade.
-        return {
-            text: '18级超强台风',
-            qualifier: '扩展',
-            color: '#120338',
-            textColor: '#FFFFFF',
-        };
-    }
-
-    function formatCleanTime(str: string) {
-        if (!str || str.length < 12) {
-            return str;
-        }
-        try {
-            const y = parseInt(str.substring(0, 4), 10);
-            const m = parseInt(str.substring(4, 6), 10) - 1;
-            const d = parseInt(str.substring(6, 8), 10);
-            const h = parseInt(str.substring(8, 10), 10);
-
-            const utcDate = new Date(Date.UTC(y, m, d, h, 0, 0));
-            const bjTimeMs = utcDate.getTime() + 8 * 3600 * 1000;
-            const bjDate = new Date(bjTimeMs);
-
-            const bjM = String(bjDate.getUTCMonth() + 1).padStart(2, '0');
-            const bjD = String(bjDate.getUTCDate()).padStart(2, '0');
-            const bjH = String(bjDate.getUTCHours()).padStart(2, '0');
-
-            return `${bjM}-${bjD} ${bjH}:00`;
-        } catch (e) {
-            return str;
-        }
-    }
-
-    function formatForecastTime(baseStr: string, fcHours: number) {
-        if (!baseStr || baseStr.length < 12) {
-            return baseStr;
-        }
-        try {
-            const y = parseInt(baseStr.substring(0, 4), 10);
-            const m = parseInt(baseStr.substring(4, 6), 10) - 1;
-            const d = parseInt(baseStr.substring(6, 8), 10);
-            const h = parseInt(baseStr.substring(8, 10), 10);
-
-            const utcDate = new Date(Date.UTC(y, m, d, h, 0, 0));
-            const targetMs = utcDate.getTime() + fcHours * 3600 * 1000 + 8 * 3600 * 1000;
-            const targetDate = new Date(targetMs);
-
-            const bjM = String(targetDate.getUTCMonth() + 1).padStart(2, '0');
-            const bjD = String(targetDate.getUTCDate()).padStart(2, '0');
-            const bjH = String(targetDate.getUTCHours()).padStart(2, '0');
-
-            return `${bjM}-${bjD} ${bjH}:00`;
-        } catch (e) {
-            return baseStr;
-        }
     }
 
     export const onopen = (_params: unknown) => {
@@ -395,39 +268,7 @@
     }
 
     function selectAndFocusStrongestTyphoon() {
-        const strongest = typhoonListInfo.reduce((selected: any, item: any) => {
-            const latest = item.historyPoints?.[0];
-            if (!latest) {
-                return selected;
-            }
-            if (!selected) {
-                return item;
-            }
-
-            const selectedLatest = selected.historyPoints[0];
-            const windSpeed = Number(latest.speedMs);
-            const selectedWindSpeed = Number(selectedLatest.speedMs);
-            const hasWindSpeed = Number.isFinite(windSpeed);
-            const selectedHasWindSpeed = Number.isFinite(selectedWindSpeed);
-
-            if (hasWindSpeed !== selectedHasWindSpeed) {
-                return hasWindSpeed ? item : selected;
-            }
-            if (hasWindSpeed && windSpeed !== selectedWindSpeed) {
-                return windSpeed > selectedWindSpeed ? item : selected;
-            }
-
-            const pressure = Number(latest.pressure);
-            const selectedPressure = Number(selectedLatest.pressure);
-            if (
-                Number.isFinite(pressure) &&
-                (!Number.isFinite(selectedPressure) || pressure < selectedPressure)
-            ) {
-                return item;
-            }
-
-            return selected;
-        }, null);
+        const strongest = findStrongestTyphoon(typhoonListInfo);
 
         if (!strongest) {
             expandedTyphoonId = null;
@@ -471,7 +312,7 @@
             const speedMs = p[7];
             const bft = getBeaufort(speedMs);
             const formattedT = formatCleanTime(timeStr);
-            const [displayDate = formattedT, displayTime = ''] = formattedT.split(/\s+/, 2);
+            const { date: displayDate, time: displayTime } = splitDisplayTime(formattedT);
 
             realSegments.push({ latlng: [lat, lng], color: bft.color });
 
@@ -644,7 +485,7 @@
                 return;
             }
 
-            const data = parseJsonp(text, '台风列表');
+            const data = parseJsonpPayload<any>(text, '台风列表');
             if (!Array.isArray(data?.typhoonList) || data.typhoonList.length === 0) {
                 statusText = '⚠️ 中央气象台当前没有可显示的台风数据。';
                 return;
@@ -676,7 +517,7 @@
                         return;
                     }
 
-                    const viewData = parseJsonp(viewText, `${tfNo} 台风详情`);
+                    const viewData = parseJsonpPayload<any>(viewText, `${tfNo} 台风详情`);
                     if (viewData && viewData.typhoon) {
                         renderTyphoonData(
                             tfId,

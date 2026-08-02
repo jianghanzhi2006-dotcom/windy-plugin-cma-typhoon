@@ -1,6 +1,7 @@
 # windy-plugin-cma-typhoon
 
 [![Windy Plugin](https://img.shields.io/badge/Windy-Plugin-blue.svg)](https://www.windy.com)
+[![CI](https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon/actions/workflows/ci.yml/badge.svg)](https://github.com/jianghanzhi2006-dotcom/windy-plugin-cma-typhoon/actions/workflows/ci.yml)
 [![Data Source](<https://img.shields.io/badge/Data%20Source-CMA%20(typhoon.nmc.cn)-red.svg>)](https://typhoon.nmc.cn)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -28,14 +29,16 @@ A third-party [Windy.com](https://www.windy.com) plugin for tracking Western Pac
 
 ## Installation status
 
-This plugin is being prepared for Windy review. The official `publish-plugin` GitHub Actions workflow produces an installation URL after a version is uploaded. After Windy approves and lists the plugin, it can also be found from Windy's Plugins panel.
+Version 1.0.1 has been uploaded through Windy's official `publish-plugin` GitHub Actions workflow. Version 1.0.2 is the current review candidate. After Windy approves and lists the plugin, it can also be found from Windy's Plugins panel.
 
 For local development, follow Windy's plugin-development setup and load this repository in developer mode.
 
 ## Development
 
 ```bash
-npm install
+npm ci
+npm test
+npm run typecheck
 npm run start
 ```
 

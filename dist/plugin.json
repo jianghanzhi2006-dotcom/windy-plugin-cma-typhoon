@@ -1,6 +1,6 @@
 {
   "name": "windy-plugin-cma-typhoon",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "🌀",
   "title": "中央气象台 (CMA) 台风路径追踪",
   "description": "CMA real-time typhoon tracker using the GB/T 28591-2012 0–17 wind scale, with a clearly labeled extended Level 18 above 61.2 m/s and GB/T 19201-2006 tropical-cyclone categories.",
@@ -9,7 +9,7 @@
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785637900379,
-  "builtReadable": "2026-08-02T02:31:40.379Z",
+  "built": 1785641439851,
+  "builtReadable": "2026-08-02T03:30:39.851Z",
   "screenshot": "screenshot.jpg"
 }

@@ -2,7 +2,7 @@ import type { ExternalPluginConfig } from '@windy/interfaces';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-cma-typhoon',
-    version: '1.0.1',
+    version: '1.0.2',
     icon: '🌀',
     title: '中央气象台 (CMA) 台风路径追踪',
     description:
