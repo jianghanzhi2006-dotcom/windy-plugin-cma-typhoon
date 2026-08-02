@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785588904756,
-  "builtReadable": "2026-08-01T12:55:04.756Z",
+  "built": 1785635329037,
+  "builtReadable": "2026-08-02T01:48:49.037Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -661,14 +661,14 @@ function add_css(target) {
 
 function get_each_context(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[18] = list[i];
+	child_ctx[22] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_1(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[21] = list[i];
-	child_ctx[23] = i;
+	child_ctx[25] = list[i];
+	child_ctx[27] = i;
 	return child_ctx;
 }
 
@@ -713,7 +713,7 @@ function create_if_block(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty & /*typhoonListInfo, focusPoint*/ 18) {
+			if (dirty & /*typhoonListInfo, focusPoint, expandedTyphoonId, toggleTyphoonPanel*/ 106) {
 				each_value = ensure_array_like(/*typhoonListInfo*/ ctx[1]);
 				let i;
 
@@ -746,10 +746,90 @@ function create_if_block(ctx) {
 	};
 }
 
-// (118:70) {#if pt.bft.qualifier}
+// (91:24) {#if expandedTyphoonId === item.id}
 function create_if_block_1(ctx) {
+	let div2;
+	let div0;
+	let t1;
+	let div1;
+	let each_value_1 = ensure_array_like(/*item*/ ctx[22].historyPoints);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_1.length; i += 1) {
+		each_blocks[i] = create_each_block_1(get_each_context_1(ctx, each_value_1, i));
+	}
+
+	return {
+		c() {
+			div2 = element("div");
+			div0 = element("div");
+			div0.textContent = "📜 全程风力演变轨迹（最新在顶部，点击直达）：";
+			t1 = space();
+			div1 = element("div");
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			set_style(div0, "font-size", "12px");
+			set_style(div0, "color", "#8c8c8c");
+			set_style(div0, "margin-bottom", "8px");
+			set_style(div0, "font-weight", "bold");
+			set_style(div1, "max-height", "520px");
+			set_style(div1, "overflow-y", "auto");
+			set_style(div1, "padding-right", "4px");
+			set_style(div2, "margin-top", "8px");
+		},
+		m(target, anchor) {
+			insert(target, div2, anchor);
+			append(div2, div0);
+			append(div2, t1);
+			append(div2, div1);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div1, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty & /*focusPoint, typhoonListInfo*/ 66) {
+				each_value_1 = ensure_array_like(/*item*/ ctx[22].historyPoints);
+				let i;
+
+				for (i = 0; i < each_value_1.length; i += 1) {
+					const child_ctx = get_each_context_1(ctx, each_value_1, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_1(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(div1, null);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_1.length;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div2);
+			}
+
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (145:74) {#if pt.bft.qualifier}
+function create_if_block_2(ctx) {
 	let span;
-	let t_value = /*pt*/ ctx[21].bft.qualifier + "";
+	let t_value = /*pt*/ ctx[25].bft.qualifier + "";
 	let t;
 
 	return {
@@ -768,7 +848,7 @@ function create_if_block_1(ctx) {
 			append(span, t);
 		},
 		p(ctx, dirty) {
-			if (dirty & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[21].bft.qualifier + "")) set_data(t, t_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[25].bft.qualifier + "")) set_data(t, t_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -778,37 +858,37 @@ function create_if_block_1(ctx) {
 	};
 }
 
-// (79:32) {#each item.historyPoints as pt, idx}
+// (101:36) {#each item.historyPoints as pt, idx}
 function create_each_block_1(ctx) {
 	let div3;
 	let div0;
 	let span0;
-	let t0_value = /*pt*/ ctx[21].formatTime + "";
+	let t0_value = /*pt*/ ctx[25].formatTime + "";
 	let t0;
 	let t1;
 	let div2;
 	let span1;
-	let t2_value = /*pt*/ ctx[21].pressure + "";
+	let t2_value = /*pt*/ ctx[25].pressure + "";
 	let t2;
 	let t3;
 	let t4;
 	let div1;
 	let span2;
-	let t5_value = /*pt*/ ctx[21].bft.text + "";
+	let t5_value = /*pt*/ ctx[25].bft.text + "";
 	let t5;
 	let t6;
 	let span3;
 	let t7;
-	let t8_value = /*pt*/ ctx[21].speedMs + "";
+	let t8_value = /*pt*/ ctx[25].speedMs + "";
 	let t8;
 	let t9;
 	let t10;
 	let mounted;
 	let dispose;
-	let if_block = /*pt*/ ctx[21].bft.qualifier && create_if_block_1(ctx);
+	let if_block = /*pt*/ ctx[25].bft.qualifier && create_if_block_2(ctx);
 
-	function click_handler_1() {
-		return /*click_handler_1*/ ctx[9](/*pt*/ ctx[21]);
+	function click_handler_2() {
+		return /*click_handler_2*/ ctx[12](/*pt*/ ctx[25]);
 	}
 
 	return {
@@ -833,8 +913,8 @@ function create_each_block_1(ctx) {
 			t9 = text("m/s)");
 			if (if_block) if_block.c();
 			t10 = space();
-			set_style(span0, "color", /*idx*/ ctx[23] === 0 ? '#40a9ff' : '#ffffff');
-			set_style(span0, "font-weight", /*idx*/ ctx[23] === 0 ? 'bold' : 'normal');
+			set_style(span0, "color", /*idx*/ ctx[27] === 0 ? '#40a9ff' : '#ffffff');
+			set_style(span0, "font-weight", /*idx*/ ctx[27] === 0 ? 'bold' : 'normal');
 			set_style(div0, "display", "flex");
 			set_style(div0, "align-items", "center");
 			set_style(div0, "gap", "8px");
@@ -848,13 +928,13 @@ function create_each_block_1(ctx) {
 			set_style(span3, "opacity", "0.95");
 			set_style(span3, "margin-top", "2px");
 			set_style(span3, "white-space", "nowrap");
-			set_style(div1, "background", /*pt*/ ctx[21].bft.color);
-			set_style(div1, "color", /*pt*/ ctx[21].bft.textColor);
+			set_style(div1, "background", /*pt*/ ctx[25].bft.color);
+			set_style(div1, "color", /*pt*/ ctx[25].bft.textColor);
 			set_style(div1, "padding", "4px 10px");
 			set_style(div1, "border-radius", "6px");
 			set_style(div1, "font-weight", "bold");
 
-			set_style(div1, "text-shadow", /*pt*/ ctx[21].bft.textColor === '#ffffff'
+			set_style(div1, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
 			? '0 1px 2px rgba(0,0,0,0.8)'
 			: 'none');
 
@@ -867,7 +947,7 @@ function create_each_block_1(ctx) {
 			set_style(div2, "display", "flex");
 			set_style(div2, "align-items", "center");
 			set_style(div2, "gap", "10px");
-			set_style(div3, "background", /*idx*/ ctx[23] === 0 ? '#132738' : '#262626');
+			set_style(div3, "background", /*idx*/ ctx[27] === 0 ? '#132738' : '#262626');
 			set_style(div3, "border-radius", "6px");
 			set_style(div3, "padding", "8px 12px");
 			set_style(div3, "margin-bottom", "6px");
@@ -877,11 +957,11 @@ function create_each_block_1(ctx) {
 			set_style(div3, "align-items", "center");
 			set_style(div3, "cursor", "pointer");
 
-			set_style(div3, "border", /*idx*/ ctx[23] === 0
+			set_style(div3, "border", /*idx*/ ctx[27] === 0
 			? '1.5px solid #1890ff'
 			: '1px solid #383838');
 
-			set_style(div3, "box-shadow", /*idx*/ ctx[23] === 0
+			set_style(div3, "box-shadow", /*idx*/ ctx[27] === 0
 			? '0 0 8px rgba(24,144,255,0.35)'
 			: 'none');
 
@@ -910,22 +990,22 @@ function create_each_block_1(ctx) {
 			append(div3, t10);
 
 			if (!mounted) {
-				dispose = listen(div3, "click", click_handler_1);
+				dispose = listen(div3, "click", click_handler_2);
 				mounted = true;
 			}
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
-			if (dirty & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[21].formatTime + "")) set_data(t0, t0_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[21].pressure + "")) set_data(t2, t2_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*pt*/ ctx[21].bft.text + "")) set_data(t5, t5_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[21].speedMs + "")) set_data(t8, t8_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[25].formatTime + "")) set_data(t0, t0_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[25].pressure + "")) set_data(t2, t2_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*pt*/ ctx[25].bft.text + "")) set_data(t5, t5_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[25].speedMs + "")) set_data(t8, t8_value);
 
-			if (/*pt*/ ctx[21].bft.qualifier) {
+			if (/*pt*/ ctx[25].bft.qualifier) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_1(ctx);
+					if_block = create_if_block_2(ctx);
 					if_block.c();
 					if_block.m(span3, null);
 				}
@@ -935,15 +1015,15 @@ function create_each_block_1(ctx) {
 			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div1, "background", /*pt*/ ctx[21].bft.color);
+				set_style(div1, "background", /*pt*/ ctx[25].bft.color);
 			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div1, "color", /*pt*/ ctx[21].bft.textColor);
+				set_style(div1, "color", /*pt*/ ctx[25].bft.textColor);
 			}
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div1, "text-shadow", /*pt*/ ctx[21].bft.textColor === '#ffffff'
+				set_style(div1, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
 				? '0 1px 2px rgba(0,0,0,0.8)'
 				: 'none');
 			}
@@ -962,41 +1042,49 @@ function create_each_block_1(ctx) {
 
 // (53:16) {#each typhoonListInfo as item}
 function create_each_block(ctx) {
-	let div4;
-	let div0;
+	let div;
+	let button;
 	let strong;
 	let t0;
-	let t1_value = /*item*/ ctx[18].no + "";
+	let t1_value = /*item*/ ctx[22].no + "";
 	let t1;
 	let t2;
-	let t3_value = /*item*/ ctx[18].nameCn + "";
+	let t3_value = /*item*/ ctx[22].nameCn + "";
 	let t3;
 	let t4;
-	let t5_value = /*item*/ ctx[18].nameEn + "";
+	let t5_value = /*item*/ ctx[22].nameEn + "";
 	let t5;
 	let t6;
 	let t7;
-	let span;
+	let span2;
+	let span0;
 	let t8;
-	let t9_value = /*item*/ ctx[18].status + "";
+	let t9_value = /*item*/ ctx[22].status + "";
 	let t9;
 	let t10;
-	let div3;
-	let div1;
-	let t12;
-	let div2;
-	let t13;
-	let each_value_1 = ensure_array_like(/*item*/ ctx[18].historyPoints);
-	let each_blocks = [];
+	let span1;
 
-	for (let i = 0; i < each_value_1.length; i += 1) {
-		each_blocks[i] = create_each_block_1(get_each_context_1(ctx, each_value_1, i));
+	let t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+	? '▼'
+	: '▶') + "";
+
+	let t11;
+	let button_aria_expanded_value;
+	let t12;
+	let t13;
+	let mounted;
+	let dispose;
+
+	function click_handler_1() {
+		return /*click_handler_1*/ ctx[11](/*item*/ ctx[22]);
 	}
+
+	let if_block = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id && create_if_block_1(ctx);
 
 	return {
 		c() {
-			div4 = element("div");
-			div0 = element("div");
+			div = element("div");
+			button = element("button");
 			strong = element("strong");
 			t0 = text("🌀 ");
 			t1 = text(t1_value);
@@ -1006,58 +1094,76 @@ function create_each_block(ctx) {
 			t5 = text(t5_value);
 			t6 = text(")");
 			t7 = space();
-			span = element("span");
+			span2 = element("span");
+			span0 = element("span");
 			t8 = text("● ");
 			t9 = text(t9_value);
 			t10 = space();
-			div3 = element("div");
-			div1 = element("div");
-			div1.textContent = "📜 全程风力演变轨迹（最新在顶部，点击直达）：";
+			span1 = element("span");
+			t11 = text(t11_value);
 			t12 = space();
-			div2 = element("div");
-
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				each_blocks[i].c();
-			}
-
+			if (if_block) if_block.c();
 			t13 = space();
 			set_style(strong, "color", "#69c0ff");
 			set_style(strong, "font-size", "15px");
 
-			set_style(span, "background", /*item*/ ctx[18].status === '进行中'
+			set_style(span0, "background", /*item*/ ctx[22].status === '进行中'
 			? '#275017'
 			: '#434343');
 
-			set_style(span, "color", "#ffffff");
-			set_style(span, "padding", "2px 8px");
-			set_style(span, "border-radius", "10px");
-			set_style(span, "font-size", "12px");
-			set_style(span, "font-weight", "bold");
-			set_style(div0, "display", "flex");
-			set_style(div0, "justify-content", "space-between");
-			set_style(div0, "align-items", "center");
-			set_style(div0, "margin-bottom", "8px");
-			set_style(div0, "border-bottom", "1px solid #333");
-			set_style(div0, "padding-bottom", "6px");
-			set_style(div1, "font-size", "12px");
-			set_style(div1, "color", "#8c8c8c");
-			set_style(div1, "margin-bottom", "8px");
-			set_style(div1, "font-weight", "bold");
-			set_style(div2, "max-height", "520px");
-			set_style(div2, "overflow-y", "auto");
-			set_style(div2, "padding-right", "4px");
-			set_style(div3, "margin-top", "8px");
-			set_style(div4, "background", "#1e1e1e");
-			set_style(div4, "border-radius", "8px");
-			set_style(div4, "padding", "12px");
-			set_style(div4, "margin-bottom", "12px");
-			set_style(div4, "border", "1px solid #3a3a3a");
-			set_style(div4, "box-shadow", "0 2px 6px rgba(0,0,0,0.4)");
+			set_style(span0, "color", "#ffffff");
+			set_style(span0, "padding", "2px 8px");
+			set_style(span0, "border-radius", "10px");
+			set_style(span0, "font-size", "12px");
+			set_style(span0, "font-weight", "bold");
+			attr(span1, "aria-hidden", "true");
+			set_style(span1, "color", "#bfbfbf");
+			set_style(span1, "font-size", "12px");
+			set_style(span1, "line-height", "1");
+			set_style(span1, "width", "12px");
+			set_style(span1, "text-align", "center");
+			set_style(span2, "display", "flex");
+			set_style(span2, "align-items", "center");
+			set_style(span2, "gap", "7px");
+			set_style(span2, "flex-shrink", "0");
+			attr(button, "type", "button");
+			attr(button, "aria-expanded", button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id);
+			set_style(button, "width", "100%");
+			set_style(button, "display", "flex");
+			set_style(button, "justify-content", "space-between");
+			set_style(button, "align-items", "center");
+			set_style(button, "gap", "8px");
+
+			set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			? '6px'
+			: '0'));
+
+			set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			? '8px'
+			: '0'));
+
+			set_style(button, "border", "none");
+
+			set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			? '1px solid #333'
+			: 'none');
+
+			set_style(button, "background", "transparent");
+			set_style(button, "color", "inherit");
+			set_style(button, "text-align", "left");
+			set_style(button, "cursor", "pointer");
+			set_style(button, "font", "inherit");
+			set_style(div, "background", "#1e1e1e");
+			set_style(div, "border-radius", "8px");
+			set_style(div, "padding", "12px");
+			set_style(div, "margin-bottom", "12px");
+			set_style(div, "border", "1px solid #3a3a3a");
+			set_style(div, "box-shadow", "0 2px 6px rgba(0,0,0,0.4)");
 		},
 		m(target, anchor) {
-			insert(target, div4, anchor);
-			append(div4, div0);
-			append(div0, strong);
+			insert(target, div, anchor);
+			append(div, button);
+			append(button, strong);
 			append(strong, t0);
 			append(strong, t1);
 			append(strong, t2);
@@ -1065,65 +1171,83 @@ function create_each_block(ctx) {
 			append(strong, t4);
 			append(strong, t5);
 			append(strong, t6);
-			append(div0, t7);
-			append(div0, span);
-			append(span, t8);
-			append(span, t9);
-			append(div4, t10);
-			append(div4, div3);
-			append(div3, div1);
-			append(div3, t12);
-			append(div3, div2);
+			append(button, t7);
+			append(button, span2);
+			append(span2, span0);
+			append(span0, t8);
+			append(span0, t9);
+			append(span2, t10);
+			append(span2, span1);
+			append(span1, t11);
+			append(div, t12);
+			if (if_block) if_block.m(div, null);
+			append(div, t13);
 
-			for (let i = 0; i < each_blocks.length; i += 1) {
-				if (each_blocks[i]) {
-					each_blocks[i].m(div2, null);
-				}
+			if (!mounted) {
+				dispose = listen(button, "click", click_handler_1);
+				mounted = true;
 			}
-
-			append(div4, t13);
 		},
-		p(ctx, dirty) {
-			if (dirty & /*typhoonListInfo*/ 2 && t1_value !== (t1_value = /*item*/ ctx[18].no + "")) set_data(t1, t1_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t3_value !== (t3_value = /*item*/ ctx[18].nameCn + "")) set_data(t3, t3_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*item*/ ctx[18].nameEn + "")) set_data(t5, t5_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t9_value !== (t9_value = /*item*/ ctx[18].status + "")) set_data(t9, t9_value);
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+			if (dirty & /*typhoonListInfo*/ 2 && t1_value !== (t1_value = /*item*/ ctx[22].no + "")) set_data(t1, t1_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t3_value !== (t3_value = /*item*/ ctx[22].nameCn + "")) set_data(t3, t3_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*item*/ ctx[22].nameEn + "")) set_data(t5, t5_value);
+			if (dirty & /*typhoonListInfo*/ 2 && t9_value !== (t9_value = /*item*/ ctx[22].status + "")) set_data(t9, t9_value);
 
 			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(span, "background", /*item*/ ctx[18].status === '进行中'
+				set_style(span0, "background", /*item*/ ctx[22].status === '进行中'
 				? '#275017'
 				: '#434343');
 			}
 
-			if (dirty & /*focusPoint, typhoonListInfo*/ 18) {
-				each_value_1 = ensure_array_like(/*item*/ ctx[18].historyPoints);
-				let i;
+			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10 && t11_value !== (t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			? '▼'
+			: '▶') + "")) set_data(t11, t11_value);
 
-				for (i = 0; i < each_value_1.length; i += 1) {
-					const child_ctx = get_each_context_1(ctx, each_value_1, i);
+			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10 && button_aria_expanded_value !== (button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id)) {
+				attr(button, "aria-expanded", button_aria_expanded_value);
+			}
 
-					if (each_blocks[i]) {
-						each_blocks[i].p(child_ctx, dirty);
-					} else {
-						each_blocks[i] = create_each_block_1(child_ctx);
-						each_blocks[i].c();
-						each_blocks[i].m(div2, null);
-					}
+			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10) {
+				set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+				? '6px'
+				: '0'));
+			}
+
+			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10) {
+				set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+				? '8px'
+				: '0'));
+			}
+
+			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10) {
+				set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+				? '1px solid #333'
+				: 'none');
+			}
+
+			if (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block_1(ctx);
+					if_block.c();
+					if_block.m(div, t13);
 				}
-
-				for (; i < each_blocks.length; i += 1) {
-					each_blocks[i].d(1);
-				}
-
-				each_blocks.length = each_value_1.length;
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
 			}
 		},
 		d(detaching) {
 			if (detaching) {
-				detach(div4);
+				detach(div);
 			}
 
-			destroy_each(each_blocks, detaching);
+			if (if_block) if_block.d();
+			mounted = false;
+			dispose();
 		}
 	};
 }
@@ -1155,19 +1279,19 @@ function create_fragment(ctx) {
 	return {
 		c() {
 			div0 = element("div");
-			div0.textContent = `${/*title*/ ctx[3]}`;
+			div0.textContent = `${/*title*/ ctx[4]}`;
 			t1 = space();
 			section = element("section");
 			div1 = element("div");
-			div1.textContent = `${/*title*/ ctx[3]}`;
+			div1.textContent = `${/*title*/ ctx[4]}`;
 			t3 = space();
 			div4 = element("div");
 			div2 = element("div");
 
 			div2.innerHTML = `<strong style="color: #40a9ff; font-size: 14px;">🌀 中央气象台 (CMA) 实时与预报路径</strong> <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">数据来源：CMA 官方接口 (typhoon.nmc.cn)<br/>
-                风力标准：GB/T 28591-2012（0–17级，2分钟平均风速）<br/>
+                风力级数：GB/T 28591-2012（0–17级）<br/>
                 扩展显示：风速 &gt; 61.2 m/s 时标记为“18级（扩展）”<br/>
-                气旋等级：GB/T 19201-2006（热带低压至超强台风）<br/>
+                气旋等级：GB/T 19201-2006（2分钟平均风）<br/>
                 轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)</p>`;
 
 			t11 = space();
@@ -1228,8 +1352,8 @@ function create_fragment(ctx) {
 
 			if (!mounted) {
 				dispose = [
-					listen(div1, "click", /*click_handler*/ ctx[8]),
-					listen(button, "click", /*fetchCMATyphoonLive*/ ctx[5])
+					listen(div1, "click", /*click_handler*/ ctx[10]),
+					listen(button, "click", /*fetchCMATyphoonLive*/ ctx[7])
 				];
 
 				mounted = true;
@@ -1365,7 +1489,7 @@ function getBeaufort(ms) {
 
 	if (ms <= 13.8) {
 		return {
-			text: '6级强风',
+			text: '6级热带低压',
 			color: '#389E0D',
 			textColor: '#FFFFFF'
 		};
@@ -1373,7 +1497,7 @@ function getBeaufort(ms) {
 
 	if (ms <= 17.1) {
 		return {
-			text: '7级劲风',
+			text: '7级热带低压',
 			color: '#FADB14',
 			textColor: '#000000'
 		};
@@ -1381,7 +1505,7 @@ function getBeaufort(ms) {
 
 	if (ms <= 20.7) {
 		return {
-			text: '8级热带低压',
+			text: '8级热带风暴',
 			color: '#FA8C16',
 			textColor: '#FFFFFF'
 		};
@@ -1405,7 +1529,7 @@ function getBeaufort(ms) {
 
 	if (ms <= 32.6) {
 		return {
-			text: '11级暴风',
+			text: '11级强热带风暴',
 			color: '#A8071A',
 			textColor: '#FFFFFF'
 		};
@@ -1467,12 +1591,6 @@ function getBeaufort(ms) {
 	};
 }
 
-function getBeaufortPopupText(bft) {
-	return bft.qualifier
-	? `${bft.text}（${bft.qualifier}显示）`
-	: bft.text;
-}
-
 function formatCleanTime(str) {
 	if (!str || str.length < 12) {
 		return str;
@@ -1525,6 +1643,7 @@ function instance($$self, $$props, $$invalidate) {
 	let activeRequest = null;
 	let requestSequence = 0;
 	let isLoading = false;
+	let expandedTyphoonId = null;
 
 	const handleMapClick = () => {
 		map.closePopup();
@@ -1570,8 +1689,62 @@ function instance($$self, $$props, $$invalidate) {
 		cancelActiveRequest();
 		releaseMapResources();
 		$$invalidate(1, typhoonListInfo = []);
+		$$invalidate(3, expandedTyphoonId = null);
 		$$invalidate(0, statusText = '插件已关闭；重新打开后可刷新中央气象台实时数据。');
 	};
+
+	function toggleTyphoonPanel(tfId) {
+		$$invalidate(3, expandedTyphoonId = expandedTyphoonId === tfId ? null : tfId);
+	}
+
+	function selectAndFocusStrongestTyphoon() {
+		const strongest = typhoonListInfo.reduce(
+			(selected, item) => {
+				const latest = item.historyPoints?.[0];
+
+				if (!latest) {
+					return selected;
+				}
+
+				if (!selected) {
+					return item;
+				}
+
+				const selectedLatest = selected.historyPoints[0];
+				const windSpeed = Number(latest.speedMs);
+				const selectedWindSpeed = Number(selectedLatest.speedMs);
+				const hasWindSpeed = Number.isFinite(windSpeed);
+				const selectedHasWindSpeed = Number.isFinite(selectedWindSpeed);
+
+				if (hasWindSpeed !== selectedHasWindSpeed) {
+					return hasWindSpeed ? item : selected;
+				}
+
+				if (hasWindSpeed && windSpeed !== selectedWindSpeed) {
+					return windSpeed > selectedWindSpeed ? item : selected;
+				}
+
+				const pressure = Number(latest.pressure);
+				const selectedPressure = Number(selectedLatest.pressure);
+
+				if (Number.isFinite(pressure) && (!Number.isFinite(selectedPressure) || pressure < selectedPressure)) {
+					return item;
+				}
+
+				return selected;
+			},
+			null
+		);
+
+		if (!strongest) {
+			$$invalidate(3, expandedTyphoonId = null);
+			return;
+		}
+
+		$$invalidate(3, expandedTyphoonId = strongest.id);
+		const strongestLatest = strongest.historyPoints[0];
+		map.flyTo([strongestLatest.lat, strongestLatest.lng], 5);
+	}
 
 	function focusPoint(pt) {
 		map.flyTo([pt.lat, pt.lng], 6);
@@ -1604,7 +1777,7 @@ function instance($$self, $$props, $$invalidate) {
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                     <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
                     <b>📍 时间</b>：${formattedT}<br/>
-                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
                     <b>📉 中心气压</b>：${pressure} hPa<br/>
                     <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                 </div>
@@ -1623,8 +1796,8 @@ function instance($$self, $$props, $$invalidate) {
 
 			const marker = window.L.circleMarker([lat, lng], {
 				radius: 4,
-				color: '#ffffff',
-				weight: 1.5,
+				stroke: false,
+				fill: true,
 				fillColor: bft.color,
 				fillOpacity: 1,
 				interactive: true
@@ -1675,7 +1848,7 @@ function instance($$self, $$props, $$invalidate) {
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                             <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
                             <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
-                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${getBeaufortPopupText(bft)} (${speedMs} m/s)</span><br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
                             <b>📉 预测中心气压</b>：${pressure} hPa<br/>
                             <b>🧭 坐标</b>：${lat}°N, ${lng}°E
                         </div>
@@ -1727,9 +1900,6 @@ function instance($$self, $$props, $$invalidate) {
 					historyPoints: reversedReal
 				}
 			]);
-
-			const latestPt = realSegments[realSegments.length - 1].latlng;
-			map.flyTo([latestPt[0], latestPt[1]], 5);
 		}
 	}
 
@@ -1747,6 +1917,7 @@ function instance($$self, $$props, $$invalidate) {
 		layerGroup.clearLayers();
 		$$invalidate(0, statusText = '🌐 正在向中央气象台服务器 (typhoon.nmc.cn) 请求实时与预报数据...');
 		$$invalidate(1, typhoonListInfo = []);
+		$$invalidate(3, expandedTyphoonId = null);
 		let renderedCount = 0;
 		let failedCount = 0;
 
@@ -1817,6 +1988,8 @@ function instance($$self, $$props, $$invalidate) {
 				return;
 			}
 
+			selectAndFocusStrongestTyphoon();
+
 			$$invalidate(0, statusText = renderedCount > 0
 			? `✅ 已绘制 ${renderedCount} 个台风的实况路径与金色预报虚线${failedCount > 0 ? `，${failedCount} 个详情请求失败` : ''}。`
 			: '❌ 台风列表已返回，但未能绘制任何详情数据。');
@@ -1858,34 +2031,38 @@ function instance($$self, $$props, $$invalidate) {
 	});
 
 	const click_handler = () => bcast.emit('rqstOpen', 'menu');
-	const click_handler_1 = pt => focusPoint(pt);
+	const click_handler_1 = item => toggleTyphoonPanel(item.id);
+	const click_handler_2 = pt => focusPoint(pt);
 
 	return [
 		statusText,
 		typhoonListInfo,
 		isLoading,
+		expandedTyphoonId,
 		title,
+		toggleTyphoonPanel,
 		focusPoint,
 		fetchCMATyphoonLive,
 		onopen,
 		onclose,
 		click_handler,
-		click_handler_1
+		click_handler_1,
+		click_handler_2
 	];
 }
 
 class Plugin extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 6, onclose: 7 }, add_css);
+		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 8, onclose: 9 }, add_css);
 	}
 
 	get onopen() {
-		return this.$$.ctx[6];
+		return this.$$.ctx[8];
 	}
 
 	get onclose() {
-		return this.$$.ctx[7];
+		return this.$$.ctx[9];
 	}
 }
 
