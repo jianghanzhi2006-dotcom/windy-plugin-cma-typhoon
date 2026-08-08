@@ -5,7 +5,6 @@ import terser from '@rollup/plugin-terser';
 import serve from 'rollup-plugin-serve';
 import rollupSvelte from 'rollup-plugin-svelte';
 import rollupSwc from 'rollup-plugin-swc3';
-import rollupCleanup from 'rollup-plugin-cleanup';
 
 import { less } from 'svelte-preprocess-less';
 import sveltePreprocess from 'svelte-preprocess';
@@ -28,13 +27,9 @@ export default {
         {
             file: `dist/${out}.min.js`,
             format: 'module',
-            plugins: [rollupCleanup({ comments: 'none', extensions: ['ts'] }), terser()],
+            plugins: [terser()],
         },
     ],
-
-    onwarn: () => {
-        /* We disable all warning messages */
-    },
     external: id => id.startsWith('@windy/'),
     watch: {
         include: ['src/**'],

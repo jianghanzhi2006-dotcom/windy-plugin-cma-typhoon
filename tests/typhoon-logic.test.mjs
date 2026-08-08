@@ -2,12 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    escapeHtml,
     findStrongestTyphoon,
+    formatBeijingRefreshTime,
     formatCleanTime,
     formatForecastTime,
     getBeaufort,
+    getCmaListYears,
+    getLatestObservationTime,
+    isValidLatLng,
     parseJsonpPayload,
+    selectDefaultTyphoon,
+    selectRecentStopped,
+    shouldRenderForecast,
     splitDisplayTime,
+    toFiniteNumber,
+    toNonNegativeNumber,
 } from '../.tmp/tests/typhoonLogic.js';
 
 test('parseJsonpPayload extracts the callback payload', () => {
@@ -39,23 +49,144 @@ test('getBeaufort preserves category boundaries and the labelled extension', () 
     );
 });
 
+test('invalid wind values never fall through to the extended Level 18 band', () => {
+    for (const value of [Number.NaN, undefined, null, 'n/a', '', -1]) {
+        assert.deepEqual(getBeaufort(value), {
+            text: '风速暂无数据',
+            color: '#595959',
+            textColor: '#FFFFFF',
+        });
+    }
+
+    assert.equal(getBeaufort('17.2').text, '8级热带风暴');
+    assert.equal(getBeaufort(0).text, '0级无风');
+});
+
+test('numeric and coordinate validation rejects empty, non-finite, and out-of-range data', () => {
+    assert.equal(toFiniteNumber(' 12.5 '), 12.5);
+    assert.equal(toFiniteNumber(null), null);
+    assert.equal(toFiniteNumber(''), null);
+    assert.equal(toFiniteNumber(Number.POSITIVE_INFINITY), null);
+    assert.equal(toNonNegativeNumber(-0.1), null);
+    assert.equal(toNonNegativeNumber('0'), 0);
+    assert.equal(isValidLatLng(22.5, 114.1), true);
+    assert.equal(isValidLatLng('22.5', '114.1'), true);
+    assert.equal(isValidLatLng(91, 114.1), false);
+    assert.equal(isValidLatLng(22.5, 181), false);
+    assert.equal(isValidLatLng(null, 114.1), false);
+});
+
+test('escapeHtml neutralizes remote text before it enters popup markup', () => {
+    assert.equal(
+        escapeHtml(`<img src=x onerror="alert('x')">&`),
+        '&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;',
+    );
+    assert.equal(escapeHtml(null), '');
+});
+
 test('formatCleanTime converts UTC source hours to Beijing time across dates', () => {
     assert.equal(formatCleanTime('202508011100'), '08-01 19:00');
+    assert.equal(formatCleanTime('202508011137'), '08-01 19:37');
     assert.equal(formatCleanTime('202507311700'), '08-01 01:00');
     assert.equal(formatCleanTime('202512311800'), '01-01 02:00');
+    assert.equal(formatCleanTime('202502301100'), '202502301100');
     assert.equal(formatCleanTime('short'), 'short');
 });
 
 test('formatForecastTime adds forecast lead time before Beijing conversion', () => {
     assert.equal(formatForecastTime('202508011100', 0), '08-01 19:00');
     assert.equal(formatForecastTime('202508011100', 120), '08-06 19:00');
+    assert.equal(formatForecastTime('202508011100', -1), '202508011100');
     assert.equal(formatForecastTime('short', 24), 'short');
+});
+
+test('Beijing refresh time and CMA list years handle the UTC year boundary', () => {
+    assert.equal(formatBeijingRefreshTime(new Date('2026-08-08T21:34:00Z')), '08-09 05:34');
+    assert.deepEqual(getCmaListYears(new Date('2026-12-31T15:59:00Z')), [2026]);
+    assert.deepEqual(getCmaListYears(new Date('2026-12-31T16:01:00Z')), [2027, 2026]);
+    assert.deepEqual(getCmaListYears(new Date('2027-01-31T15:59:00Z')), [2027, 2026]);
+    assert.deepEqual(getCmaListYears(new Date('2027-01-31T16:01:00Z')), [2027]);
 });
 
 test('splitDisplayTime always separates mobile date and time columns', () => {
     assert.deepEqual(splitDisplayTime('08-01 11:00'), { date: '08-01', time: '11:00' });
     assert.deepEqual(splitDisplayTime('07-31 17:00'), { date: '07-31', time: '17:00' });
     assert.deepEqual(splitDisplayTime('unknown'), { date: 'unknown', time: '' });
+});
+
+test('getLatestObservationTime reads the last observed point safely', () => {
+    const rawData = [];
+    rawData[8] = [
+        [null, '202608070000', null, null, 120, 20],
+        [null, '202608080600', null, null, 121, 21],
+    ];
+
+    assert.equal(getLatestObservationTime(rawData), '202608080600');
+
+    rawData[8].push([null, '202608090000', null, null, 999, 21]);
+    rawData[8].push([null, 'invalid', null, null, 122, 22]);
+    assert.equal(getLatestObservationTime(rawData), '202608080600');
+    assert.equal(getLatestObservationTime([]), '');
+    assert.equal(getLatestObservationTime(null), '');
+});
+
+test('selectRecentStopped sorts by latest observation time instead of input order', () => {
+    const oldStorm = { id: 30, latestObservationTime: '202608050000' };
+    const newestStorm = { id: 10, latestObservationTime: '202608080600' };
+    const middleStorm = { id: 20, latestObservationTime: '202608070000' };
+
+    assert.deepEqual(selectRecentStopped([oldStorm, newestStorm, middleStorm], 2), [
+        newestStorm,
+        middleStorm,
+    ]);
+    assert.deepEqual(selectRecentStopped([oldStorm], 0), []);
+});
+
+test('selectDefaultTyphoon prefers the strongest active storm', () => {
+    const stopped = {
+        id: 'stopped',
+        status: '已停编',
+        latestObservationTime: '202608080900',
+        historyPoints: [{ speedMs: 70, pressure: 900 }],
+    };
+    const weakActive = {
+        id: 'weak-active',
+        status: '进行中',
+        latestObservationTime: '202608080600',
+        historyPoints: [{ speedMs: 20, pressure: 990 }],
+    };
+    const strongActive = {
+        id: 'strong-active',
+        status: '进行中',
+        latestObservationTime: '202608080300',
+        historyPoints: [{ speedMs: 35, pressure: 960 }],
+    };
+
+    assert.equal(selectDefaultTyphoon([stopped, weakActive, strongActive]), strongActive);
+});
+
+test('selectDefaultTyphoon uses the most recently observed stopped storm as fallback', () => {
+    const older = {
+        id: 'older',
+        status: '已停编',
+        latestObservationTime: '202608070000',
+        historyPoints: [{ speedMs: 50, pressure: 950 }],
+    };
+    const newer = {
+        id: 'newer',
+        status: '已停编',
+        latestObservationTime: '202608080000',
+        historyPoints: [{ speedMs: 10, pressure: 1000 }],
+    };
+
+    assert.equal(selectDefaultTyphoon([older, newer]), newer);
+    assert.equal(selectDefaultTyphoon([]), null);
+});
+
+test('shouldRenderForecast suppresses forecasts for stopped storms', () => {
+    assert.equal(shouldRenderForecast('进行中'), true);
+    assert.equal(shouldRenderForecast('已停编'), false);
+    assert.equal(shouldRenderForecast(undefined), false);
 });
 
 test('findStrongestTyphoon selects the highest wind regardless of list order', () => {
@@ -74,9 +205,12 @@ test('findStrongestTyphoon uses lower pressure only when wind speeds tie', () =>
 test('findStrongestTyphoon handles missing data and keeps a stable tie', () => {
     const missing = { id: 'missing', historyPoints: [] };
     const invalid = { id: 'invalid', historyPoints: [{ speedMs: 'n/a', pressure: 900 }] };
+    const nullWind = { id: 'null', historyPoints: [{ speedMs: null, pressure: 1000 }] };
+    const calm = { id: 'calm', historyPoints: [{ speedMs: 0, pressure: 1005 }] };
     const first = { id: 'first', historyPoints: [{ speedMs: 20, pressure: 990 }] };
     const tied = { id: 'tied', historyPoints: [{ speedMs: 20, pressure: 990 }] };
     assert.equal(findStrongestTyphoon([]), null);
     assert.equal(findStrongestTyphoon([missing, invalid, first]), first);
+    assert.equal(findStrongestTyphoon([nullWind, calm]), calm);
     assert.equal(findStrongestTyphoon([first, tied]), first);
 });

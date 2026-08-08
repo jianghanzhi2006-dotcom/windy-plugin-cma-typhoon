@@ -15,13 +15,16 @@ A third-party [Windy.com](https://www.windy.com) plugin for tracking Western Pac
 
 ## Features
 
-- 📡 **Live CMA data:** requests observed tracks and CMA forecast points directly from `typhoon.nmc.cn`.
+- 📡 **Live CMA data:** requests observed tracks and CMA forecast points directly from `typhoon.nmc.cn` when opened or manually refreshed; background automatic refresh is intentionally disabled so the map never moves unexpectedly.
 - 🌈 **Color-coded track segments:** each observed segment is colored by wind force for quick intensity comparison.
 - 🟡 **Golden dashed forecast line:** renders available CMA forecast points as a separate dashed path.
-- 🗂️ **Collapsible storm histories:** keeps at most one typhoon history expanded at a time and opens the currently strongest successfully loaded system by default.
+- 🗂️ **Collapsible storm histories:** keeps at most one history expanded; it opens the strongest active system, or the most recently observed stopped system when none remain active.
+- 🛑 **Stopped-storm handling:** active storms remain primary while the most recently stopped history is retained; with no active storms, up to three stopped systems are ordered after all available stopped details are checked and shown without forecast lines.
+- 🧭 **Year-boundary continuity:** uses the Beijing calendar year and also checks the previous year's CMA list during January, so a storm crossing New Year is not lost.
+- 🧹 **Defensive data handling:** invalid coordinates are skipped, unavailable wind speed is displayed neutrally instead of as an extreme category, and remote popup text is HTML-escaped.
 - 🕒 **Beijing-time conversion:** converts source timestamps from UTC to Beijing Time (UTC+8).
 - 🖱️ **Interactive, touch-friendly points:** larger transparent hit areas make observed and forecast nodes easier to select.
-- 🔄 **Controlled refresh lifecycle:** only one CMA refresh request stays active; closing the plugin cancels it and removes the plugin's own map listener and layers.
+- 🔄 **Controlled refresh lifecycle:** only one CMA refresh request stays active, requests have bounded timeouts, a new map is committed atomically only after valid points are ready, manual refresh preserves the current viewport and expanded storm, and closing the plugin cancels the request and removes the plugin's own map listener and layers.
 
 ## Screenshot
 
@@ -29,7 +32,7 @@ A third-party [Windy.com](https://www.windy.com) plugin for tracking Western Pac
 
 ## Installation status
 
-Version 1.0.1 has been uploaded through Windy's official `publish-plugin` GitHub Actions workflow. Version 1.0.2 is the current review candidate. After Windy approves and lists the plugin, it can also be found from Windy's Plugins panel.
+Version 1.0.2 has passed Windy's review, was uploaded through the official `publish-plugin` GitHub Actions workflow, and is listed in Windy's Plugins panel.
 
 For local development, follow Windy's plugin-development setup and load this repository in developer mode.
 

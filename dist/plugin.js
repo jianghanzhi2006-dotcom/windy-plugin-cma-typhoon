@@ -1,6 +1,6 @@
 const __pluginConfig =  {
   "name": "windy-plugin-cma-typhoon",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "icon": "🌀",
   "title": "中央气象台 (CMA) 台风路径追踪",
   "description": "CMA real-time typhoon tracker using the GB/T 28591-2012 0–17 wind scale, with a clearly labeled extended Level 18 above 61.2 m/s and GB/T 19201-2006 tropical-cyclone categories.",
@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1785643497887,
-  "builtReadable": "2026-08-02T04:04:57.887Z",
+  "built": 1786232367443,
+  "builtReadable": "2026-08-08T23:39:27.443Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -653,6 +653,11 @@ if (typeof window !== 'undefined')
 const config = {
     title: '中央气象台 (CMA) 台风路径追踪'};
 
+const UNKNOWN_WIND = {
+    text: '风速暂无数据',
+    color: '#595959',
+    textColor: '#FFFFFF'
+};
 function parseJsonpPayload(text, label) {
     const start = text.indexOf('(');
     const end = text.lastIndexOf(')');
@@ -665,7 +670,44 @@ function parseJsonpPayload(text, label) {
         throw new Error(`${label}返回内容不是有效 JSON`);
     }
 }
-function getBeaufort(ms) {
+function toFiniteNumber(value) {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value !== 'string' || value.trim() === '') {
+        return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+function toNonNegativeNumber(value) {
+    const parsed = toFiniteNumber(value);
+    return parsed !== null && parsed >= 0 ? parsed : null;
+}
+function isValidLatLng(latValue, lngValue) {
+    const lat = toFiniteNumber(latValue);
+    const lng = toFiniteNumber(lngValue);
+    return lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character)=>{
+        const entities = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        };
+        return entities[character];
+    });
+}
+function getBeaufort(rawSpeed) {
+    const ms = toNonNegativeNumber(rawSpeed);
+    if (ms === null) {
+        return {
+            ...UNKNOWN_WIND
+        };
+    }
     if (ms < 0.3) {
         return {
             text: '0级无风',
@@ -801,41 +843,62 @@ function getBeaufort(ms) {
         textColor: '#FFFFFF'
     };
 }
-function parseSourceHour(value) {
-    if (!value || value.length < 12) {
+function parseSourceTime(value) {
+    if (!/^\d{12}(?:\d{2})?$/.test(value)) {
         return null;
     }
     const year = Number.parseInt(value.substring(0, 4), 10);
     const month = Number.parseInt(value.substring(4, 6), 10) - 1;
     const day = Number.parseInt(value.substring(6, 8), 10);
     const hour = Number.parseInt(value.substring(8, 10), 10);
+    const minute = Number.parseInt(value.substring(10, 12), 10);
     if (![
         year,
         month,
         day,
-        hour
+        hour,
+        minute
     ].every(Number.isFinite)) {
         return null;
     }
-    return new Date(Date.UTC(year, month, day, hour, 0, 0));
+    const result = new Date(Date.UTC(year, month, day, hour, minute, 0));
+    if (result.getUTCFullYear() !== year || result.getUTCMonth() !== month || result.getUTCDate() !== day || result.getUTCHours() !== hour || result.getUTCMinutes() !== minute) {
+        return null;
+    }
+    return result;
 }
-function formatBeijingHour(date) {
+function formatBeijingTime(date) {
     const beijingDate = new Date(date.getTime() + 8 * 3600 * 1000);
     const month = String(beijingDate.getUTCMonth() + 1).padStart(2, '0');
     const day = String(beijingDate.getUTCDate()).padStart(2, '0');
     const hour = String(beijingDate.getUTCHours()).padStart(2, '0');
-    return `${month}-${day} ${hour}:00`;
+    const minute = String(beijingDate.getUTCMinutes()).padStart(2, '0');
+    return `${month}-${day} ${hour}:${minute}`;
 }
 function formatCleanTime(value) {
-    const sourceDate = parseSourceHour(value);
-    return sourceDate ? formatBeijingHour(sourceDate) : value;
+    const sourceDate = parseSourceTime(value);
+    return sourceDate ? formatBeijingTime(sourceDate) : value;
 }
 function formatForecastTime(baseValue, forecastHours) {
-    const sourceDate = parseSourceHour(baseValue);
-    if (!sourceDate) {
+    const sourceDate = parseSourceTime(baseValue);
+    const safeForecastHours = toNonNegativeNumber(forecastHours);
+    if (!sourceDate || safeForecastHours === null) {
         return baseValue;
     }
-    return formatBeijingHour(new Date(sourceDate.getTime() + forecastHours * 3600 * 1000));
+    return formatBeijingTime(new Date(sourceDate.getTime() + safeForecastHours * 3600 * 1000));
+}
+function formatBeijingRefreshTime(date) {
+    return formatBeijingTime(date);
+}
+function getCmaListYears(date) {
+    const beijingDate = new Date(date.getTime() + 8 * 3600 * 1000);
+    const year = beijingDate.getUTCFullYear();
+    return beijingDate.getUTCMonth() === 0 ? [
+        year,
+        year - 1
+    ] : [
+        year
+    ];
 }
 function splitDisplayTime(value) {
     const [date = value, time = ''] = value.trim().split(/\s+/, 2);
@@ -843,6 +906,43 @@ function splitDisplayTime(value) {
         date,
         time
     };
+}
+function getLatestObservationTime(rawData) {
+    if (!Array.isArray(rawData)) {
+        return '';
+    }
+    const points = rawData[8];
+    if (!Array.isArray(points) || points.length === 0) {
+        return '';
+    }
+    for(let index = points.length - 1; index >= 0; index -= 1){
+        const point = points[index];
+        if (Array.isArray(point) && typeof point[1] === 'string' && parseSourceTime(point[1]) && isValidLatLng(point[5], point[4])) {
+            return point[1];
+        }
+    }
+    return '';
+}
+function selectRecentStopped(items, limit) {
+    const safeLimit = Math.max(0, Math.floor(limit));
+    return [
+        ...items
+    ].sort((left, right)=>{
+        const timeCompare = String(right.latestObservationTime ?? '').localeCompare(String(left.latestObservationTime ?? ''));
+        if (timeCompare !== 0) {
+            return timeCompare;
+        }
+        const leftId = Number(left.id);
+        const rightId = Number(right.id);
+        return Number.isFinite(leftId) && Number.isFinite(rightId) ? rightId - leftId : 0;
+    }).slice(0, safeLimit);
+}
+function selectDefaultTyphoon(items) {
+    const active = items.filter((item)=>item.status === '进行中');
+    return active.length > 0 ? findStrongestTyphoon(active) : selectRecentStopped(items, 1)[0] ?? null;
+}
+function shouldRenderForecast(status) {
+    return status === '进行中';
 }
 function findStrongestTyphoon(items) {
     return items.reduce((selected, item)=>{
@@ -857,19 +957,19 @@ function findStrongestTyphoon(items) {
         if (!selectedLatest) {
             return item;
         }
-        const windSpeed = Number(latest.speedMs);
-        const selectedWindSpeed = Number(selectedLatest.speedMs);
-        const hasWindSpeed = Number.isFinite(windSpeed);
-        const selectedHasWindSpeed = Number.isFinite(selectedWindSpeed);
+        const windSpeed = toNonNegativeNumber(latest.speedMs);
+        const selectedWindSpeed = toNonNegativeNumber(selectedLatest.speedMs);
+        const hasWindSpeed = windSpeed !== null;
+        const selectedHasWindSpeed = selectedWindSpeed !== null;
         if (hasWindSpeed !== selectedHasWindSpeed) {
             return hasWindSpeed ? item : selected;
         }
-        if (hasWindSpeed && windSpeed !== selectedWindSpeed) {
+        if (windSpeed !== null && selectedWindSpeed !== null && windSpeed !== selectedWindSpeed) {
             return windSpeed > selectedWindSpeed ? item : selected;
         }
-        const pressure = Number(latest.pressure);
-        const selectedPressure = Number(selectedLatest.pressure);
-        if (Number.isFinite(pressure) && (!Number.isFinite(selectedPressure) || pressure < selectedPressure)) {
+        const pressure = toNonNegativeNumber(latest.pressure);
+        const selectedPressure = toNonNegativeNumber(selectedLatest.pressure);
+        if (pressure !== null && (selectedPressure === null || pressure < selectedPressure)) {
             return item;
         }
         return selected;
@@ -884,18 +984,18 @@ function add_css(target) {
 
 function get_each_context(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[22] = list[i];
+	child_ctx[32] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_1(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[25] = list[i];
-	child_ctx[27] = i;
+	child_ctx[35] = list[i];
+	child_ctx[37] = i;
 	return child_ctx;
 }
 
-// (48:8) {#if typhoonListInfo.length > 0}
+// (52:8) {#if typhoonListInfo.length > 0}
 function create_if_block(ctx) {
 	let div;
 	let h4;
@@ -936,7 +1036,7 @@ function create_if_block(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty & /*typhoonListInfo, focusPoint, expandedTyphoonId, toggleTyphoonPanel*/ 106) {
+			if (dirty[0] & /*typhoonListInfo, focusPoint, expandedTyphoonId, toggleTyphoonPanel*/ 202) {
 				each_value = ensure_array_like(/*typhoonListInfo*/ ctx[1]);
 				let i;
 
@@ -969,13 +1069,13 @@ function create_if_block(ctx) {
 	};
 }
 
-// (91:24) {#if expandedTyphoonId === item.id}
+// (95:24) {#if expandedTyphoonId === item.id}
 function create_if_block_1(ctx) {
 	let div2;
 	let div0;
 	let t1;
 	let div1;
-	let each_value_1 = ensure_array_like(/*item*/ ctx[22].historyPoints);
+	let each_value_1 = ensure_array_like(/*item*/ ctx[32].historyPoints);
 	let each_blocks = [];
 
 	for (let i = 0; i < each_value_1.length; i += 1) {
@@ -1016,8 +1116,8 @@ function create_if_block_1(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty & /*focusPoint, typhoonListInfo*/ 66) {
-				each_value_1 = ensure_array_like(/*item*/ ctx[22].historyPoints);
+			if (dirty[0] & /*focusPoint, typhoonListInfo*/ 130) {
+				each_value_1 = ensure_array_like(/*item*/ ctx[32].historyPoints);
 				let i;
 
 				for (i = 0; i < each_value_1.length; i += 1) {
@@ -1049,10 +1149,10 @@ function create_if_block_1(ctx) {
 	};
 }
 
-// (157:70) {#if pt.bft.qualifier}
+// (167:72) {#if pt.bft.qualifier}
 function create_if_block_2(ctx) {
 	let span;
-	let t_value = /*pt*/ ctx[25].bft.qualifier + "";
+	let t_value = /*pt*/ ctx[35].bft.qualifier + "";
 	let t;
 
 	return {
@@ -1071,7 +1171,7 @@ function create_if_block_2(ctx) {
 			append(span, t);
 		},
 		p(ctx, dirty) {
-			if (dirty & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[25].bft.qualifier + "")) set_data(t, t_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[35].bft.qualifier + "")) set_data(t, t_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -1081,42 +1181,46 @@ function create_if_block_2(ctx) {
 	};
 }
 
-// (101:36) {#each item.historyPoints as pt, idx}
+// (105:36) {#each item.historyPoints as pt, idx}
 function create_each_block_1(ctx) {
 	let div3;
 	let div0;
 	let span0;
-	let t0_value = /*pt*/ ctx[25].displayDate + "";
+	let t0_value = /*pt*/ ctx[35].displayDate + "";
 	let t0;
 	let t1;
 	let span1;
-	let t2_value = /*pt*/ ctx[25].displayTime + "";
+	let t2_value = /*pt*/ ctx[35].displayTime + "";
 	let t2;
 	let t3;
 	let div1;
 	let span2;
-	let t4_value = /*pt*/ ctx[25].pressure + "";
+	let t4_value = /*pt*/ ctx[35].pressure + "";
 	let t4;
 	let t5;
 	let span3;
 	let t7;
 	let div2;
 	let span4;
-	let t8_value = /*pt*/ ctx[25].bft.text + "";
+	let t8_value = /*pt*/ ctx[35].bft.text + "";
 	let t8;
 	let t9;
 	let span5;
 	let t10;
-	let t11_value = /*pt*/ ctx[25].speedMs + "";
+	let t11_value = /*pt*/ ctx[35].speedDisplay + "";
 	let t11;
 	let t12;
 	let t13;
 	let mounted;
 	let dispose;
-	let if_block = /*pt*/ ctx[25].bft.qualifier && create_if_block_2(ctx);
+	let if_block = /*pt*/ ctx[35].bft.qualifier && create_if_block_2(ctx);
 
 	function click_handler_2() {
-		return /*click_handler_2*/ ctx[12](/*pt*/ ctx[25]);
+		return /*click_handler_2*/ ctx[14](/*pt*/ ctx[35]);
+	}
+
+	function keydown_handler_1(...args) {
+		return /*keydown_handler_1*/ ctx[15](/*pt*/ ctx[35], ...args);
 	}
 
 	return {
@@ -1143,14 +1247,14 @@ function create_each_block_1(ctx) {
 			span5 = element("span");
 			t10 = text("(");
 			t11 = text(t11_value);
-			t12 = text("m/s)");
+			t12 = text(")");
 			if (if_block) if_block.c();
 			t13 = space();
-			set_style(span0, "color", /*idx*/ ctx[27] === 0 ? '#40a9ff' : '#ffffff');
-			set_style(span0, "font-weight", /*idx*/ ctx[27] === 0 ? 'bold' : 'normal');
+			set_style(span0, "color", /*idx*/ ctx[37] === 0 ? '#40a9ff' : '#ffffff');
+			set_style(span0, "font-weight", /*idx*/ ctx[37] === 0 ? 'bold' : 'normal');
 			set_style(span0, "white-space", "nowrap");
-			set_style(span1, "color", /*idx*/ ctx[27] === 0 ? '#40a9ff' : '#ffffff');
-			set_style(span1, "font-weight", /*idx*/ ctx[27] === 0 ? 'bold' : 'normal');
+			set_style(span1, "color", /*idx*/ ctx[37] === 0 ? '#40a9ff' : '#ffffff');
+			set_style(span1, "font-weight", /*idx*/ ctx[37] === 0 ? 'bold' : 'normal');
 			set_style(span1, "white-space", "nowrap");
 			set_style(div0, "min-width", "0");
 			set_style(div0, "display", "flex");
@@ -1179,13 +1283,13 @@ function create_each_block_1(ctx) {
 			set_style(div2, "box-sizing", "border-box");
 			set_style(div2, "width", "100%");
 			set_style(div2, "min-width", "0");
-			set_style(div2, "background", /*pt*/ ctx[25].bft.color);
-			set_style(div2, "color", /*pt*/ ctx[25].bft.textColor);
+			set_style(div2, "background", /*pt*/ ctx[35].bft.color);
+			set_style(div2, "color", /*pt*/ ctx[35].bft.textColor);
 			set_style(div2, "padding", "4px 6px");
 			set_style(div2, "border-radius", "6px");
 			set_style(div2, "font-weight", "bold");
 
-			set_style(div2, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
+			set_style(div2, "text-shadow", /*pt*/ ctx[35].bft.textColor === '#ffffff'
 			? '0 1px 2px rgba(0,0,0,0.8)'
 			: 'none');
 
@@ -1194,7 +1298,9 @@ function create_each_block_1(ctx) {
 			set_style(div2, "flex-direction", "column");
 			set_style(div2, "align-items", "center");
 			set_style(div2, "justify-content", "center");
-			set_style(div3, "background", /*idx*/ ctx[27] === 0 ? '#132738' : '#262626');
+			attr(div3, "role", "button");
+			attr(div3, "tabindex", "0");
+			set_style(div3, "background", /*idx*/ ctx[37] === 0 ? '#132738' : '#262626');
 			set_style(div3, "border-radius", "6px");
 			set_style(div3, "padding", "8px 12px");
 			set_style(div3, "margin-bottom", "6px");
@@ -1206,11 +1312,11 @@ function create_each_block_1(ctx) {
 			set_style(div3, "align-items", "center");
 			set_style(div3, "cursor", "pointer");
 
-			set_style(div3, "border", /*idx*/ ctx[27] === 0
+			set_style(div3, "border", /*idx*/ ctx[37] === 0
 			? '1.5px solid #1890ff'
 			: '1px solid #383838');
 
-			set_style(div3, "box-shadow", /*idx*/ ctx[27] === 0
+			set_style(div3, "box-shadow", /*idx*/ ctx[37] === 0
 			? '0 0 8px rgba(24,144,255,0.35)'
 			: 'none');
 
@@ -1243,19 +1349,23 @@ function create_each_block_1(ctx) {
 			append(div3, t13);
 
 			if (!mounted) {
-				dispose = listen(div3, "click", click_handler_2);
+				dispose = [
+					listen(div3, "click", click_handler_2),
+					listen(div3, "keydown", keydown_handler_1)
+				];
+
 				mounted = true;
 			}
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
-			if (dirty & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[25].displayDate + "")) set_data(t0, t0_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[25].displayTime + "")) set_data(t2, t2_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t4_value !== (t4_value = /*pt*/ ctx[25].pressure + "")) set_data(t4, t4_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[25].bft.text + "")) set_data(t8, t8_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t11_value !== (t11_value = /*pt*/ ctx[25].speedMs + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[35].displayDate + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[35].displayTime + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t4_value !== (t4_value = /*pt*/ ctx[35].pressure + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[35].bft.text + "")) set_data(t8, t8_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t11_value !== (t11_value = /*pt*/ ctx[35].speedDisplay + "")) set_data(t11, t11_value);
 
-			if (/*pt*/ ctx[25].bft.qualifier) {
+			if (/*pt*/ ctx[35].bft.qualifier) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
@@ -1268,16 +1378,16 @@ function create_each_block_1(ctx) {
 				if_block = null;
 			}
 
-			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div2, "background", /*pt*/ ctx[25].bft.color);
+			if (dirty[0] & /*typhoonListInfo*/ 2) {
+				set_style(div2, "background", /*pt*/ ctx[35].bft.color);
 			}
 
-			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div2, "color", /*pt*/ ctx[25].bft.textColor);
+			if (dirty[0] & /*typhoonListInfo*/ 2) {
+				set_style(div2, "color", /*pt*/ ctx[35].bft.textColor);
 			}
 
-			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(div2, "text-shadow", /*pt*/ ctx[25].bft.textColor === '#ffffff'
+			if (dirty[0] & /*typhoonListInfo*/ 2) {
+				set_style(div2, "text-shadow", /*pt*/ ctx[35].bft.textColor === '#ffffff'
 				? '0 1px 2px rgba(0,0,0,0.8)'
 				: 'none');
 			}
@@ -1289,36 +1399,36 @@ function create_each_block_1(ctx) {
 
 			if (if_block) if_block.d();
 			mounted = false;
-			dispose();
+			run_all(dispose);
 		}
 	};
 }
 
-// (53:16) {#each typhoonListInfo as item}
+// (57:16) {#each typhoonListInfo as item}
 function create_each_block(ctx) {
 	let div;
 	let button;
 	let strong;
 	let t0;
-	let t1_value = /*item*/ ctx[22].no + "";
+	let t1_value = /*item*/ ctx[32].no + "";
 	let t1;
 	let t2;
-	let t3_value = /*item*/ ctx[22].nameCn + "";
+	let t3_value = /*item*/ ctx[32].nameCn + "";
 	let t3;
 	let t4;
-	let t5_value = /*item*/ ctx[22].nameEn + "";
+	let t5_value = /*item*/ ctx[32].nameEn + "";
 	let t5;
 	let t6;
 	let t7;
 	let span2;
 	let span0;
 	let t8;
-	let t9_value = /*item*/ ctx[22].status + "";
+	let t9_value = /*item*/ ctx[32].status + "";
 	let t9;
 	let t10;
 	let span1;
 
-	let t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+	let t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 	? '▼'
 	: '▶') + "";
 
@@ -1330,10 +1440,10 @@ function create_each_block(ctx) {
 	let dispose;
 
 	function click_handler_1() {
-		return /*click_handler_1*/ ctx[11](/*item*/ ctx[22]);
+		return /*click_handler_1*/ ctx[13](/*item*/ ctx[32]);
 	}
 
-	let if_block = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id && create_if_block_1(ctx);
+	let if_block = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id && create_if_block_1(ctx);
 
 	return {
 		c() {
@@ -1361,7 +1471,7 @@ function create_each_block(ctx) {
 			set_style(strong, "color", "#69c0ff");
 			set_style(strong, "font-size", "15px");
 
-			set_style(span0, "background", /*item*/ ctx[22].status === '进行中'
+			set_style(span0, "background", /*item*/ ctx[32].status === '进行中'
 			? '#275017'
 			: '#434343');
 
@@ -1381,24 +1491,24 @@ function create_each_block(ctx) {
 			set_style(span2, "gap", "7px");
 			set_style(span2, "flex-shrink", "0");
 			attr(button, "type", "button");
-			attr(button, "aria-expanded", button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id);
+			attr(button, "aria-expanded", button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id);
 			set_style(button, "width", "100%");
 			set_style(button, "display", "flex");
 			set_style(button, "justify-content", "space-between");
 			set_style(button, "align-items", "center");
 			set_style(button, "gap", "8px");
 
-			set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 			? '6px'
 			: '0'));
 
-			set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 			? '8px'
 			: '0'));
 
 			set_style(button, "border", "none");
 
-			set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 			? '1px solid #333'
 			: 'none');
 
@@ -1444,44 +1554,44 @@ function create_each_block(ctx) {
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
-			if (dirty & /*typhoonListInfo*/ 2 && t1_value !== (t1_value = /*item*/ ctx[22].no + "")) set_data(t1, t1_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t3_value !== (t3_value = /*item*/ ctx[22].nameCn + "")) set_data(t3, t3_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*item*/ ctx[22].nameEn + "")) set_data(t5, t5_value);
-			if (dirty & /*typhoonListInfo*/ 2 && t9_value !== (t9_value = /*item*/ ctx[22].status + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t1_value !== (t1_value = /*item*/ ctx[32].no + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t3_value !== (t3_value = /*item*/ ctx[32].nameCn + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*item*/ ctx[32].nameEn + "")) set_data(t5, t5_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t9_value !== (t9_value = /*item*/ ctx[32].status + "")) set_data(t9, t9_value);
 
-			if (dirty & /*typhoonListInfo*/ 2) {
-				set_style(span0, "background", /*item*/ ctx[22].status === '进行中'
+			if (dirty[0] & /*typhoonListInfo*/ 2) {
+				set_style(span0, "background", /*item*/ ctx[32].status === '进行中'
 				? '#275017'
 				: '#434343');
 			}
 
-			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10 && t11_value !== (t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10 && t11_value !== (t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 			? '▼'
 			: '▶') + "")) set_data(t11, t11_value);
 
-			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10 && button_aria_expanded_value !== (button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id)) {
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10 && button_aria_expanded_value !== (button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id)) {
 				attr(button, "aria-expanded", button_aria_expanded_value);
 			}
 
-			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10) {
-				set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10) {
+				set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 				? '6px'
 				: '0'));
 			}
 
-			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10) {
-				set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10) {
+				set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 				? '8px'
 				: '0'));
 			}
 
-			if (dirty & /*expandedTyphoonId, typhoonListInfo*/ 10) {
-				set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10) {
+				set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
 				? '1px solid #333'
 				: 'none');
 			}
 
-			if (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[22].id) {
+			if (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
@@ -1514,18 +1624,18 @@ function create_fragment(ctx) {
 	let t3;
 	let div4;
 	let div2;
-	let t11;
-	let div3;
 	let t12;
+	let div3;
 	let t13;
+	let t14;
 	let button;
 
-	let t14_value = (/*isLoading*/ ctx[2]
+	let t15_value = (/*isLoading*/ ctx[2]
 	? '⏳ 正在刷新中央气象台数据…'
 	: '📡 刷新中央气象台实时数据') + "";
 
-	let t14;
 	let t15;
+	let t16;
 	let mounted;
 	let dispose;
 	let if_block = /*typhoonListInfo*/ ctx[1].length > 0 && create_if_block(ctx);
@@ -1546,18 +1656,21 @@ function create_fragment(ctx) {
                 风力级数：GB/T 28591-2012（0–17级）<br/>
                 扩展显示：风速 &gt; 61.2 m/s 时标记为“18级（扩展）”<br/>
                 气旋等级：GB/T 19201-2006（2分钟平均风）<br/>
-                轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)</p>`;
+                轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)<br/>
+                更新与停编：打开时及手动刷新；已停编仅显示历史实况</p>`;
 
-			t11 = space();
+			t12 = space();
 			div3 = element("div");
-			t12 = text(/*statusText*/ ctx[0]);
-			t13 = space();
+			t13 = text(/*statusText*/ ctx[0]);
+			t14 = space();
 			button = element("button");
-			t14 = text(t14_value);
-			t15 = space();
+			t15 = text(t15_value);
+			t16 = space();
 			if (if_block) if_block.c();
 			attr(div0, "class", "plugin__mobile-header");
 			attr(div1, "class", "plugin__title plugin__title--chevron-back");
+			attr(div1, "role", "button");
+			attr(div1, "tabindex", "0");
 			set_style(div2, "background", "rgba(24, 144, 255, 0.15)");
 			set_style(div2, "border-left", "4px solid #1890ff");
 			set_style(div2, "padding", "10px");
@@ -1595,40 +1708,41 @@ function create_fragment(ctx) {
 			append(section, t3);
 			append(section, div4);
 			append(div4, div2);
-			append(div4, t11);
+			append(div4, t12);
 			append(div4, div3);
-			append(div3, t12);
-			append(div4, t13);
+			append(div3, t13);
+			append(div4, t14);
 			append(div4, button);
-			append(button, t14);
-			append(div4, t15);
+			append(button, t15);
+			append(div4, t16);
 			if (if_block) if_block.m(div4, null);
 
 			if (!mounted) {
 				dispose = [
-					listen(div1, "click", /*click_handler*/ ctx[10]),
-					listen(button, "click", /*fetchCMATyphoonLive*/ ctx[7])
+					listen(div1, "click", /*returnToMenu*/ ctx[5]),
+					listen(div1, "keydown", /*keydown_handler*/ ctx[11]),
+					listen(button, "click", /*click_handler*/ ctx[12])
 				];
 
 				mounted = true;
 			}
 		},
-		p(ctx, [dirty]) {
-			if (dirty & /*statusText*/ 1) set_data(t12, /*statusText*/ ctx[0]);
+		p(ctx, dirty) {
+			if (dirty[0] & /*statusText*/ 1) set_data(t13, /*statusText*/ ctx[0]);
 
-			if (dirty & /*isLoading*/ 4 && t14_value !== (t14_value = (/*isLoading*/ ctx[2]
+			if (dirty[0] & /*isLoading*/ 4 && t15_value !== (t15_value = (/*isLoading*/ ctx[2]
 			? '⏳ 正在刷新中央气象台数据…'
-			: '📡 刷新中央气象台实时数据') + "")) set_data(t14, t14_value);
+			: '📡 刷新中央气象台实时数据') + "")) set_data(t15, t15_value);
 
-			if (dirty & /*isLoading*/ 4) {
+			if (dirty[0] & /*isLoading*/ 4) {
 				button.disabled = /*isLoading*/ ctx[2];
 			}
 
-			if (dirty & /*isLoading*/ 4) {
+			if (dirty[0] & /*isLoading*/ 4) {
 				set_style(button, "cursor", /*isLoading*/ ctx[2] ? 'wait' : 'pointer');
 			}
 
-			if (dirty & /*isLoading*/ 4) {
+			if (dirty[0] & /*isLoading*/ 4) {
 				set_style(button, "opacity", /*isLoading*/ ctx[2] ? 0.72 : 1);
 			}
 
@@ -1661,14 +1775,15 @@ function create_fragment(ctx) {
 	};
 }
 
-async function fetchText(url, signal) {
-	const response = await fetch(url, { signal });
+const DETAIL_CONCURRENCY = 6;
+const RECENT_STOPPED_WITH_ACTIVE = 1;
+const RECENT_STOPPED_WITHOUT_ACTIVE = 3;
 
-	if (!response.ok) {
-		throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
+function handleActivationKeydown(event, action) {
+	if (event.key === 'Enter' || event.key === ' ') {
+		event.preventDefault();
+		action();
 	}
-
-	return response.text();
 }
 
 function isAbortError(error) {
@@ -1677,8 +1792,49 @@ function isAbortError(error) {
 	: Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
 }
 
+async function mapWithConcurrency(items, concurrency, mapper) {
+	const results = new Array(items.length);
+	let nextIndex = 0;
+
+	async function worker() {
+		while (nextIndex < items.length) {
+			const currentIndex = nextIndex;
+			nextIndex += 1;
+			results[currentIndex] = await mapper(items[currentIndex]);
+		}
+	}
+
+	const workerCount = Math.min(items.length, Math.max(1, concurrency));
+	await Promise.all(Array.from({ length: workerCount }, () => worker()));
+	return results;
+}
+
+function mergeTyphoonLists(lists) {
+	const merged = new Map();
+
+	for (const list of lists) {
+		for (const item of list) {
+			if (!Array.isArray(item) || item[0] === null || item[0] === undefined) {
+				continue;
+			}
+
+			const id = String(item[0]);
+			const existing = merged.get(id);
+
+			if (!existing || item[7] === 'start') {
+				merged.set(id, item);
+			}
+		}
+	}
+
+	return [...merged.values()];
+}
+
 function instance($$self, $$props, $$invalidate) {
 	const { title } = config;
+	const REQUEST_TIMEOUT_MS = 20 * 1000;
+	const REFRESH_TIMEOUT_MS = 30 * 1000;
+	const STOPPED_CACHE_MS = 30 * 60 * 1000;
 	let statusText = '点击上方按钮发起中央气象台实时联网请求...';
 	let typhoonListInfo = [];
 	let layerGroup = null;
@@ -1686,10 +1842,15 @@ function instance($$self, $$props, $$invalidate) {
 	let requestSequence = 0;
 	let isLoading = false;
 	let expandedTyphoonId = null;
+	const stoppedTyphoonCache = new Map();
 
 	const handleMapClick = () => {
 		map.closePopup();
 	};
+
+	function returnToMenu() {
+		bcast.emit('rqstOpen', 'menu');
+	}
 
 	function ensureLayerGroup() {
 		if (!window.L) {
@@ -1721,9 +1882,48 @@ function instance($$self, $$props, $$invalidate) {
 		$$invalidate(2, isLoading = false);
 	}
 
+	async function fetchText(url, signal) {
+		const requestController = new AbortController();
+		let timedOut = false;
+		const forwardAbort = () => requestController.abort();
+
+		if (signal.aborted) {
+			requestController.abort();
+		} else {
+			signal.addEventListener('abort', forwardAbort, { once: true });
+		}
+
+		const timeoutId = setTimeout(
+			() => {
+				timedOut = true;
+				requestController.abort();
+			},
+			REQUEST_TIMEOUT_MS
+		);
+
+		try {
+			const response = await fetch(url, { signal: requestController.signal });
+
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
+			}
+
+			return await response.text();
+		} catch(error) {
+			if (timedOut) {
+				throw new Error(`请求超时（${REQUEST_TIMEOUT_MS / 1000} 秒）`);
+			}
+
+			throw error;
+		} finally {
+			clearTimeout(timeoutId);
+			signal.removeEventListener('abort', forwardAbort);
+		}
+	}
+
 	const onopen = _params => {
 		if (ensureLayerGroup()) {
-			void fetchCMATyphoonLive();
+			void fetchCMATyphoonLive('open');
 		}
 	};
 
@@ -1739,17 +1939,37 @@ function instance($$self, $$props, $$invalidate) {
 		$$invalidate(3, expandedTyphoonId = expandedTyphoonId === tfId ? null : tfId);
 	}
 
-	function selectAndFocusStrongestTyphoon() {
-		const strongest = findStrongestTyphoon(typhoonListInfo);
+	function restoreSelectionAfterRefresh(previousExpandedId, hadPreviousDisplay) {
+		if (hadPreviousDisplay) {
+			if (previousExpandedId === null) {
+				$$invalidate(3, expandedTyphoonId = null);
+				return;
+			}
 
-		if (!strongest) {
+			const stillAvailable = typhoonListInfo.some(item => String(item.id) === String(previousExpandedId));
+
+			if (stillAvailable) {
+				$$invalidate(3, expandedTyphoonId = previousExpandedId);
+				return;
+			}
+
+			$$invalidate(3, expandedTyphoonId = selectDefaultTyphoon(typhoonListInfo)?.id ?? null);
+			return;
+		}
+
+		const selected = selectDefaultTyphoon(typhoonListInfo);
+
+		if (!selected) {
 			$$invalidate(3, expandedTyphoonId = null);
 			return;
 		}
 
-		$$invalidate(3, expandedTyphoonId = strongest.id);
-		const strongestLatest = strongest.historyPoints[0];
-		map.flyTo([strongestLatest.lat, strongestLatest.lng], 5);
+		$$invalidate(3, expandedTyphoonId = selected.id);
+		const latestPoint = selected.historyPoints?.[0];
+
+		if (latestPoint) {
+			map.flyTo([latestPoint.lat, latestPoint.lng], 5);
+		}
 	}
 
 	function focusPoint(pt) {
@@ -1760,33 +1980,55 @@ function instance($$self, $$props, $$invalidate) {
 		}
 	}
 
-	function renderTyphoonData(tfId, tfNo, tfNameCn, tfNameEn, rawData, tfStatus = '进行中') {
-		if (!window.L || !layerGroup) {
-			return;
+	function renderTyphoonData(targetLayerGroup, tfId, tfNo, tfNameCn, tfNameEn, rawData, tfStatus = '进行中') {
+		if (!window.L || !targetLayerGroup) {
+			return null;
 		}
 
-		const points = rawData[8] || [];
+		const points = Array.isArray(rawData?.[8]) ? rawData[8] : [];
 		const realSegments = [];
 		const realPointsList = [];
+		const safeNo = escapeHtml(tfNo);
+		const safeNameCn = escapeHtml(tfNameCn);
+		const safeNameEn = escapeHtml(tfNameEn);
 
-		points.forEach(p => {
-			const timeStr = p[1];
-			const lng = p[4];
-			const lat = p[5];
-			const pressure = p[6];
-			const speedMs = p[7];
+		for (const point of points) {
+			if (!Array.isArray(point) || !isValidLatLng(point[5], point[4])) {
+				continue;
+			}
+
+			const timeStr = typeof point[1] === 'string' && point[1].trim() !== ''
+			? point[1]
+			: '时间未知';
+
+			const lng = toFiniteNumber(point[4]);
+			const lat = toFiniteNumber(point[5]);
+
+			if (lat === null || lng === null) {
+				continue;
+			}
+
+			const pressureValue = toNonNegativeNumber(point[6]);
+			const pressure = pressureValue === null ? '—' : pressureValue;
+			const speedMs = toNonNegativeNumber(point[7]);
+			const speedDisplay = speedMs === null ? '—' : `${speedMs}m/s`;
 			const bft = getBeaufort(speedMs);
 			const formattedT = formatCleanTime(timeStr);
 			const { date: displayDate, time: displayTime } = splitDisplayTime(formattedT);
+			const safeFormattedTime = escapeHtml(formattedT);
+			const safePressure = escapeHtml(pressure);
+			const safeSpeedDisplay = escapeHtml(speedMs === null ? '—' : `${speedMs} m/s`);
+			const safeLat = escapeHtml(lat);
+			const safeLng = escapeHtml(lng);
 			realSegments.push({ latlng: [lat, lng], color: bft.color });
 
 			const popupHtml = `
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
-                    <strong style="font-size:15px; color:#1890ff;">🌀 ${tfNo} ${tfNameCn} (${tfNameEn}) [实况点]</strong><br/>
-                    <b>📍 时间</b>：${formattedT}<br/>
-                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
-                    <b>📉 中心气压</b>：${pressure} hPa<br/>
-                    <b>🧭 坐标</b>：${lat}°N, ${lng}°E
+                    <strong style="font-size:15px; color:#1890ff;">🌀 ${safeNo} ${safeNameCn} (${safeNameEn}) [实况点]</strong><br/>
+                    <b>📍 时间</b>：${safeFormattedTime}<br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(bft.text)} (${safeSpeedDisplay})</span><br/>
+                    <b>📉 中心气压</b>：${safePressure} hPa<br/>
+                    <b>🧭 坐标</b>：${safeLat}°N, ${safeLng}°E
                 </div>
             `;
 
@@ -1799,7 +2041,7 @@ function instance($$self, $$props, $$invalidate) {
 				fillColor: '#ffffff',
 				fillOpacity: 0.001,
 				interactive: true
-			}).addTo(layerGroup);
+			}).addTo(targetLayerGroup);
 
 			const marker = window.L.circleMarker([lat, lng], {
 				radius: 4,
@@ -1808,7 +2050,7 @@ function instance($$self, $$props, $$invalidate) {
 				fillColor: bft.color,
 				fillOpacity: 1,
 				interactive: true
-			}).addTo(layerGroup);
+			}).addTo(targetLayerGroup);
 
 			hitArea.bindPopup(popupHtml, popupOptions);
 			marker.bindPopup(popupHtml, popupOptions);
@@ -1822,44 +2064,70 @@ function instance($$self, $$props, $$invalidate) {
 				displayTime,
 				pressure,
 				speedMs,
+				speedDisplay,
 				bft,
 				isForecast: false,
 				markerInstance: hitArea
 			});
-		});
+		}
 
 		for (let i = 0; i < realSegments.length - 1; i++) {
 			const segColor = realSegments[i].color;
-			window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], { color: segColor, weight: 2.5 }).addTo(layerGroup);
+			window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], { color: segColor, weight: 2.5 }).addTo(targetLayerGroup);
 		}
 
-		if (points.length > 0) {
+		if (shouldRenderForecast(tfStatus) && points.length > 0) {
 			const lastPointObj = points[points.length - 1];
-			const forecastDict = lastPointObj[11] || {};
-			const babjForecast = forecastDict['BABJ'] || Object.values(forecastDict)[0] || [];
+
+			const forecastDict = Array.isArray(lastPointObj) && lastPointObj[11] && typeof lastPointObj[11] === 'object'
+			? lastPointObj[11]
+			: {};
+
+			const forecastCandidate = forecastDict['BABJ'] || Object.values(forecastDict)[0] || [];
+
+			const babjForecast = Array.isArray(forecastCandidate)
+			? forecastCandidate
+			: [];
 
 			if (babjForecast.length > 0 && realSegments.length > 0) {
 				const lastRealCoord = realSegments[realSegments.length - 1].latlng;
 				const forecastLatlngs = [lastRealCoord];
 
-				babjForecast.forEach(fc => {
-					const fcHours = fc[0];
-					const baseTimeStr = fc[1];
-					const lng = fc[2];
-					const lat = fc[3];
-					const pressure = fc[4];
-					const speedMs = fc[5];
+				for (const forecastPoint of babjForecast) {
+					if (!Array.isArray(forecastPoint) || !isValidLatLng(forecastPoint[3], forecastPoint[2])) {
+						continue;
+					}
+
+					const fcHours = toNonNegativeNumber(forecastPoint[0]);
+
+					const baseTimeStr = typeof forecastPoint[1] === 'string'
+					? forecastPoint[1]
+					: '';
+
+					const lng = toFiniteNumber(forecastPoint[2]);
+					const lat = toFiniteNumber(forecastPoint[3]);
+
+					if (fcHours === null || lat === null || lng === null) {
+						continue;
+					}
+
+					const pressureValue = toNonNegativeNumber(forecastPoint[4]);
+					const pressure = pressureValue === null ? '—' : pressureValue;
+					const speedMs = toNonNegativeNumber(forecastPoint[5]);
 					const bft = getBeaufort(speedMs);
 					const targetFormattedTime = formatForecastTime(baseTimeStr, fcHours);
+					const safeForecastTime = escapeHtml(targetFormattedTime);
+					const safePressure = escapeHtml(pressure);
+					const safeSpeedDisplay = escapeHtml(speedMs === null ? '—' : `${speedMs} m/s`);
 					forecastLatlngs.push([lat, lng]);
 
 					const fcPopupHtml = `
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
-                            <strong style="font-size:15px; color:#faad14;">🔮 ${tfNo} ${tfNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
-                            <b>📍 预测目标时间</b>：${targetFormattedTime}<br/>
-                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${bft.text} (${speedMs} m/s)</span><br/>
-                            <b>📉 预测中心气压</b>：${pressure} hPa<br/>
-                            <b>🧭 坐标</b>：${lat}°N, ${lng}°E
+                            <strong style="font-size:15px; color:#faad14;">🔮 ${safeNo} ${safeNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
+                            <b>📍 预测目标时间</b>：${safeForecastTime}<br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(bft.text)} (${safeSpeedDisplay})</span><br/>
+                            <b>📉 预测中心气压</b>：${safePressure} hPa<br/>
+                            <b>🧭 坐标</b>：${escapeHtml(lat)}°N, ${escapeHtml(lng)}°E
                         </div>
                     `;
 
@@ -1872,7 +2140,7 @@ function instance($$self, $$props, $$invalidate) {
 						fillColor: '#ffffff',
 						fillOpacity: 0.001,
 						interactive: true
-					}).addTo(layerGroup);
+					}).addTo(targetLayerGroup);
 
 					const fcMarker = window.L.circleMarker([lat, lng], {
 						radius: 4,
@@ -1881,143 +2149,338 @@ function instance($$self, $$props, $$invalidate) {
 						fillColor: bft.color,
 						fillOpacity: 1,
 						interactive: true
-					}).addTo(layerGroup);
+					}).addTo(targetLayerGroup);
 
 					fcHitArea.bindPopup(fcPopupHtml, popupOptions);
 					fcMarker.bindPopup(fcPopupHtml, popupOptions);
-				});
+				}
 
-				window.L.polyline(forecastLatlngs, {
-					color: '#faad14',
-					weight: 2.5,
-					dashArray: '6,6'
-				}).addTo(layerGroup);
+				if (forecastLatlngs.length > 1) {
+					window.L.polyline(forecastLatlngs, {
+						color: '#faad14',
+						weight: 2.5,
+						dashArray: '6,6'
+					}).addTo(targetLayerGroup);
+				}
 			}
 		}
 
 		if (realPointsList.length > 0) {
 			const reversedReal = [...realPointsList].reverse();
 
-			$$invalidate(1, typhoonListInfo = [
-				...typhoonListInfo.filter(t => t.id !== tfId),
-				{
-					id: tfId,
-					no: tfNo,
-					nameCn: tfNameCn,
-					nameEn: tfNameEn,
-					status: tfStatus,
-					historyPoints: reversedReal
-				}
-			]);
+			return {
+				id: tfId,
+				no: tfNo,
+				nameCn: tfNameCn,
+				nameEn: tfNameEn,
+				status: tfStatus,
+				latestObservationTime: getLatestObservationTime(rawData),
+				historyPoints: reversedReal
+			};
 		}
+
+		return null;
 	}
 
-	async function fetchCMATyphoonLive() {
+	async function loadTyphoonLists(years, controller, requestId) {
+		const failedYears = [];
+		let firstFailure = null;
+
+		const lists = await Promise.all(years.map(async year => {
+			const listUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/list_${year}?callback=cmaLiveList`;
+
+			try {
+				const text = await fetchText(listUrl, controller.signal);
+
+				if (controller.signal.aborted || requestId !== requestSequence) {
+					return [];
+				}
+
+				const data = parseJsonpPayload(text, `${year} 年台风列表`);
+				return Array.isArray(data?.typhoonList) ? data.typhoonList : [];
+			} catch(error) {
+				if (isAbortError(error)) {
+					throw error;
+				}
+
+				firstFailure ??= error;
+				failedYears.push(year);
+				console.warn(`获取 ${year} 年台风列表失败`, error);
+				return [];
+			}
+		}));
+
+		if (failedYears.length === years.length) {
+			throw firstFailure instanceof Error
+			? firstFailure
+			: new Error(`全部年度台风列表请求失败（${years.join('、')}）`);
+		}
+
+		return {
+			items: mergeTyphoonLists(lists),
+			failedYears
+		};
+	}
+
+	async function loadTyphoonDetail(item, status, controller, requestId) {
+		const id = String(item[0]);
+		const no = String(item[4] ?? '');
+		const nameEn = String(item[1] ?? '');
+		const nameCn = String(item[2] ?? '');
+
+		if (status === '已停编') {
+			const cached = stoppedTyphoonCache.get(id);
+
+			if (cached && Date.now() - cached.cachedAt < STOPPED_CACHE_MS) {
+				return cached.value;
+			}
+		}
+
+		const viewUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/view_${encodeURIComponent(id)}?callback=cmaLiveView`;
+		const viewText = await fetchText(viewUrl, controller.signal);
+
+		if (controller.signal.aborted || requestId !== requestSequence) {
+			return null;
+		}
+
+		const viewData = parseJsonpPayload(viewText, `${no} 台风详情`);
+
+		if (!viewData?.typhoon) {
+			return null;
+		}
+
+		const value = {
+			id,
+			no,
+			nameCn,
+			nameEn,
+			rawData: viewData.typhoon,
+			status,
+			latestObservationTime: getLatestObservationTime(viewData.typhoon)
+		};
+
+		if (status === '已停编') {
+			stoppedTyphoonCache.set(id, { value, cachedAt: Date.now() });
+		}
+
+		return value;
+	}
+
+	async function fetchCMATyphoonLive(reason = 'manual') {
 		if (!ensureLayerGroup()) {
 			$$invalidate(0, statusText = '❌ 地图运行环境尚未就绪。');
 			return;
 		}
 
+		const previousExpandedId = expandedTyphoonId;
+		const hadPreviousDisplay = typhoonListInfo.length > 0;
 		activeRequest?.abort();
 		const controller = new AbortController();
+		let refreshTimedOut = false;
+
+		const refreshTimeoutId = setTimeout(
+			() => {
+				refreshTimedOut = true;
+				controller.abort();
+			},
+			REFRESH_TIMEOUT_MS
+		);
+
 		activeRequest = controller;
 		const requestId = ++requestSequence;
 		$$invalidate(2, isLoading = true);
-		layerGroup.clearLayers();
-		$$invalidate(0, statusText = '🌐 正在向中央气象台服务器 (typhoon.nmc.cn) 请求实时与预报数据...');
-		$$invalidate(1, typhoonListInfo = []);
-		$$invalidate(3, expandedTyphoonId = null);
-		let renderedCount = 0;
+
+		$$invalidate(0, statusText = reason === 'manual'
+		? '🌐 正在手动刷新中央气象台实时与预报数据；完成前保留当前地图和选择...'
+		: '🌐 正在加载中央气象台实时与预报数据...');
+
 		let failedCount = 0;
+		let pendingLayerGroup = null;
 
 		try {
-			const currentYear = new Date().getFullYear();
-			const listUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/list_${currentYear}?callback=cmaLiveList`;
-			const text = await fetchText(listUrl, controller.signal);
+			const listYears = getCmaListYears(new Date());
+			const { items: typhoonItems, failedYears } = await loadTyphoonLists(listYears, controller, requestId);
 
 			if (controller.signal.aborted || requestId !== requestSequence) {
 				return;
 			}
 
-			const data = parseJsonpPayload(text, '台风列表');
+			if (typhoonItems.length === 0) {
+				$$invalidate(0, statusText = hadPreviousDisplay
+				? '⚠️ 中央气象台当前列表为空；已保留上次成功显示。'
+				: '⚠️ 中央气象台当前没有可显示的台风数据。');
 
-			if (!Array.isArray(data?.typhoonList) || data.typhoonList.length === 0) {
-				$$invalidate(0, statusText = '⚠️ 中央气象台当前没有可显示的台风数据。');
 				return;
 			}
 
-			const active = data.typhoonList.filter(t => t[7] === 'start');
+			const activeItems = typhoonItems.filter(item => item[7] === 'start');
+			const stoppedItems = typhoonItems.filter(item => item[7] === 'stop');
+			const ignoredStatusCount = typhoonItems.length - activeItems.length - stoppedItems.length;
 
-			const targetList = active.length > 0
-			? active
-			: data.typhoonList.slice(0, 3);
+			const recentStoppedLimit = activeItems.length > 0
+			? RECENT_STOPPED_WITH_ACTIVE
+			: RECENT_STOPPED_WITHOUT_ACTIVE;
 
-			$$invalidate(0, statusText = active.length > 0
-			? `✅ 台风列表获取成功，正在绘制 ${targetList.length} 个活跃台风...`
-			: `⚠️ 当前无活跃台风，正在显示最近 ${targetList.length} 个台风...`);
+			$$invalidate(0, statusText = activeItems.length > 0
+			? `✅ 台风列表获取成功，正在加载 ${activeItems.length} 个活跃台风，并核对 ${stoppedItems.length} 个停编记录的最后实况时间...`
+			: `⚠️ 当前无活跃台风，正在核对 ${stoppedItems.length} 个停编记录并查找最近 ${recentStoppedLimit} 个...`);
 
-			for (const item of targetList) {
-				if (controller.signal.aborted || requestId !== requestSequence) {
-					return;
-				}
-
-				const tfId = item[0];
-				const tfNameEn = item[1];
-				const tfNameCn = item[2];
-				const tfNo = item[4];
-				const tfStatus = item[7] === 'start' ? '进行中' : '已停编';
-
+			const loadSafely = async (item, itemStatus) => {
 				try {
-					const viewUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/view_${tfId}?callback=cmaLiveView`;
-					const viewText = await fetchText(viewUrl, controller.signal);
+					const loaded = await loadTyphoonDetail(item, itemStatus, controller, requestId);
 
-					if (controller.signal.aborted || requestId !== requestSequence) {
-						return;
-					}
-
-					const viewData = parseJsonpPayload(viewText, `${tfNo} 台风详情`);
-
-					if (viewData && viewData.typhoon) {
-						renderTyphoonData(tfId, tfNo, tfNameCn, tfNameEn, viewData.typhoon, tfStatus);
-						renderedCount += 1;
-					} else {
+					if (!loaded) {
 						failedCount += 1;
 					}
+
+					return loaded;
 				} catch(error) {
 					if (isAbortError(error)) {
 						throw error;
 					}
 
 					failedCount += 1;
-					console.warn(`获取台风 ${tfNo} 详情失败`, error);
+					console.warn(`获取台风 ${String(item[4] ?? '')} 详情失败`, error);
+					return null;
 				}
-			}
+			};
+
+			const [activeResults, stoppedResults] = await Promise.all([
+				Promise.all(activeItems.map(item => loadSafely(item, '进行中'))),
+				mapWithConcurrency(stoppedItems, DETAIL_CONCURRENCY, item => loadSafely(item, '已停编'))
+			]);
 
 			if (controller.signal.aborted || requestId !== requestSequence) {
 				return;
 			}
 
-			selectAndFocusStrongestTyphoon();
+			const loadedActive = activeResults.filter(item => item !== null);
+			const loadedStopped = stoppedResults.filter(item => item !== null);
+			const recentStopped = selectRecentStopped(loadedStopped, recentStoppedLimit);
+			const targetData = [...loadedActive, ...recentStopped];
 
-			$$invalidate(0, statusText = renderedCount > 0
-			? `✅ 已绘制 ${renderedCount} 个台风的实况路径与金色预报虚线${failedCount > 0 ? `，${failedCount} 个详情请求失败` : ''}。`
-			: '❌ 台风列表已返回，但未能绘制任何详情数据。');
+			if (targetData.length === 0) {
+				$$invalidate(0, statusText = hadPreviousDisplay
+				? '❌ 台风列表已返回，但未能加载任何详情数据；已保留上次成功显示。'
+				: '❌ 台风列表已返回，但未能加载任何详情数据。');
+
+				return;
+			}
+
+			pendingLayerGroup = window.L.layerGroup();
+			const nextTyphoonListInfo = [];
+
+			for (const item of targetData) {
+				const stormLayerGroup = window.L.layerGroup();
+
+				try {
+					const rendered = renderTyphoonData(stormLayerGroup, item.id, item.no, item.nameCn, item.nameEn, item.rawData, item.status);
+
+					if (rendered) {
+						stormLayerGroup.addTo(pendingLayerGroup);
+						nextTyphoonListInfo.push(rendered);
+					} else {
+						stormLayerGroup.clearLayers();
+						failedCount += 1;
+					}
+				} catch(error) {
+					stormLayerGroup.clearLayers();
+					failedCount += 1;
+					console.warn(`绘制台风 ${item.no} 失败`, error);
+				}
+			}
+
+			if (nextTyphoonListInfo.length === 0) {
+				pendingLayerGroup.clearLayers();
+				pendingLayerGroup = null;
+
+				$$invalidate(0, statusText = hadPreviousDisplay
+				? '❌ 台风详情中没有有效的可绘制实况点；已保留上次成功显示。'
+				: '❌ 台风详情中没有有效的可绘制实况点。');
+
+				return;
+			}
+
+			const previousLayerGroup = layerGroup;
+			pendingLayerGroup.addTo(map);
+
+			try {
+				if (previousLayerGroup) {
+					map.removeLayer(previousLayerGroup);
+				}
+			} catch(error) {
+				map.removeLayer(pendingLayerGroup);
+				pendingLayerGroup.clearLayers();
+				pendingLayerGroup = null;
+				throw error;
+			}
+
+			previousLayerGroup?.clearLayers();
+			layerGroup = pendingLayerGroup;
+			pendingLayerGroup = null;
+			$$invalidate(1, typhoonListInfo = nextTyphoonListInfo);
+			restoreSelectionAfterRefresh(previousExpandedId, hadPreviousDisplay);
+			const renderedActiveCount = typhoonListInfo.filter(item => item.status === '进行中').length;
+			const renderedStoppedCount = typhoonListInfo.filter(item => item.status === '已停编').length;
+			const failureSuffix = failedCount > 0 ? `；${failedCount} 个详情未能加载` : '';
+
+			const listFailureSuffix = failedYears.length > 0
+			? `；${failedYears.join('、')} 年列表暂未加载成功`
+			: '';
+
+			const ignoredStatusSuffix = ignoredStatusCount > 0
+			? `；忽略 ${ignoredStatusCount} 条未知状态记录`
+			: '';
+
+			const refreshSuffix = `；最后刷新（北京时间）${formatBeijingRefreshTime(new Date())}`;
+
+			if (renderedActiveCount > 0) {
+				const stoppedSuffix = renderedStoppedCount > 0
+				? `，并保留最近 ${renderedStoppedCount} 个停编台风的历史实况`
+				: '';
+
+				$$invalidate(0, statusText = `✅ 已绘制 ${renderedActiveCount} 个活跃台风的实况轨迹与可用预报${stoppedSuffix}${failureSuffix}${listFailureSuffix}${ignoredStatusSuffix}${refreshSuffix}。`);
+			} else if (renderedStoppedCount > 0) {
+				const activeFailurePrefix = activeItems.length > 0 ? '活跃台风详情暂未加载成功；' : '当前无活跃台风；';
+				$$invalidate(0, statusText = `⚠️ ${activeFailurePrefix}已显示最近 ${renderedStoppedCount} 个停编台风的历史实况（不显示预报）${failureSuffix}${listFailureSuffix}${ignoredStatusSuffix}${refreshSuffix}。`);
+			} else {
+				$$invalidate(0, statusText = hadPreviousDisplay
+				? '❌ 台风详情不包含可绘制的实况点；已保留上次成功显示。'
+				: '❌ 台风详情不包含可绘制的实况点。');
+			}
 		} catch(error) {
-			if (isAbortError(error)) {
+			if (pendingLayerGroup) {
+				if (map.hasLayer(pendingLayerGroup)) {
+					map.removeLayer(pendingLayerGroup);
+				}
+
+				pendingLayerGroup.clearLayers();
+			}
+
+			if (isAbortError(error) && !refreshTimedOut) {
 				return;
 			}
 
 			console.error('中央气象台实时数据请求失败', error);
-			const message = error instanceof Error ? error.message : String(error);
 
-			if ((/返回格式|有效 JSON/).test(message)) {
-				$$invalidate(0, statusText = `❌ 数据解析失败：${message}。`);
+			const message = refreshTimedOut
+			? `整体刷新超时（${REFRESH_TIMEOUT_MS / 1000} 秒）`
+			: error instanceof Error ? error.message : String(error);
+
+			const preserveSuffix = hadPreviousDisplay ? '；已保留上次成功显示' : '';
+
+			if ((/请求超时|刷新超时/).test(message)) {
+				$$invalidate(0, statusText = `❌ 中央气象台请求超时：${message}${preserveSuffix}。`);
+			} else if ((/返回格式|有效 JSON/).test(message)) {
+				$$invalidate(0, statusText = `❌ 数据解析失败：${message}${preserveSuffix}。`);
 			} else if ((/^HTTP /).test(message)) {
-				$$invalidate(0, statusText = `❌ 中央气象台服务器返回错误：${message}。`);
+				$$invalidate(0, statusText = `❌ 中央气象台服务器返回错误：${message}${preserveSuffix}。`);
 			} else {
-				$$invalidate(0, statusText = `❌ 网络请求失败：${message || '请检查网络连接、浏览器策略或数据源状态'}。`);
+				$$invalidate(0, statusText = `❌ 网络请求失败：${message || '请检查网络连接、浏览器策略或数据源状态'}${preserveSuffix}。`);
 			}
 		} finally {
+			clearTimeout(refreshTimeoutId);
+
 			if (activeRequest === controller) {
 				activeRequest = null;
 			}
@@ -2039,9 +2502,11 @@ function instance($$self, $$props, $$invalidate) {
 		onclose();
 	});
 
-	const click_handler = () => bcast.emit('rqstOpen', 'menu');
+	const keydown_handler = event => handleActivationKeydown(event, returnToMenu);
+	const click_handler = () => void fetchCMATyphoonLive('manual');
 	const click_handler_1 = item => toggleTyphoonPanel(item.id);
 	const click_handler_2 = pt => focusPoint(pt);
+	const keydown_handler_1 = (pt, event) => handleActivationKeydown(event, () => focusPoint(pt));
 
 	return [
 		statusText,
@@ -2049,29 +2514,32 @@ function instance($$self, $$props, $$invalidate) {
 		isLoading,
 		expandedTyphoonId,
 		title,
+		returnToMenu,
 		toggleTyphoonPanel,
 		focusPoint,
 		fetchCMATyphoonLive,
 		onopen,
 		onclose,
+		keydown_handler,
 		click_handler,
 		click_handler_1,
-		click_handler_2
+		click_handler_2,
+		keydown_handler_1
 	];
 }
 
 class Plugin extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 8, onclose: 9 }, add_css);
+		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 9, onclose: 10 }, add_css, [-1, -1]);
 	}
 
 	get onopen() {
-		return this.$$.ctx[8];
+		return this.$$.ctx[9];
 	}
 
 	get onclose() {
-		return this.$$.ctx[9];
+		return this.$$.ctx[10];
 	}
 }
 
