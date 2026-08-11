@@ -9,11 +9,14 @@ import {
     formatForecastTime,
     getBeaufort,
     getCmaListYears,
+    getFirstObservationTime,
     getLatestObservationTime,
     isValidLatLng,
+    normalizeHistoricalTyphoonList,
     parseJsonpPayload,
     selectDefaultTyphoon,
     selectRecentStopped,
+    selectTyphoonsGeneratedWithinOneYear,
     shouldRenderForecast,
     splitDisplayTime,
     toFiniteNumber,
@@ -74,6 +77,76 @@ test('numeric and coordinate validation rejects empty, non-finite, and out-of-ra
     assert.equal(isValidLatLng(91, 114.1), false);
     assert.equal(isValidLatLng(22.5, 181), false);
     assert.equal(isValidLatLng(null, 114.1), false);
+});
+
+test('getFirstObservationTime finds the earliest valid timestamp even when points are unordered', () => {
+    const rawData = [];
+    rawData[8] = [
+        [null, '202608030000'],
+        [null, 'invalid'],
+        [null, '20250801120099'],
+        [null, '202608011200'],
+        [null, '202608020600'],
+    ];
+
+    assert.equal(getFirstObservationTime(rawData), '202608011200');
+    assert.equal(getFirstObservationTime([]), '');
+    assert.equal(getFirstObservationTime(null), '');
+});
+
+test('recent history uses a Beijing rolling calendar year and includes the cutoff minute', () => {
+    const now = new Date('2026-08-11T12:00:37Z');
+    const atCutoff = { id: 'cutoff', generationTime: '202508111200' };
+    const newest = { id: 'newest', generationTime: '202608111200' };
+    const beforeCutoff = { id: 'old', generationTime: '202508111159' };
+    const future = { id: 'future', generationTime: '202608111201' };
+    const invalid = { id: 'invalid', generationTime: 'not-a-time' };
+
+    assert.deepEqual(
+        selectTyphoonsGeneratedWithinOneYear(
+            [atCutoff, beforeCutoff, newest, future, invalid],
+            now,
+        ),
+        [newest, atCutoff],
+    );
+});
+
+test('recent history clamps a Beijing leap-day cutoff to February 28', () => {
+    const now = new Date('2024-02-29T12:00:00Z');
+    const atCutoff = { id: 'cutoff', generationTime: '202302281200' };
+    const beforeCutoff = { id: 'old', generationTime: '202302281159' };
+
+    assert.deepEqual(
+        selectTyphoonsGeneratedWithinOneYear([beforeCutoff, atCutoff], now),
+        [atCutoff],
+    );
+});
+
+test('historical list normalization rejects malformed rows, deduplicates, and sorts newest first', () => {
+    const items = normalizeHistoricalTyphoonList([
+        ['storm-1', 'ALPHA', '阿尔法', null, '2401', null, null, 'stop'],
+        ['storm-2', 'YAGI', '摩羯', null, '2411', null, null, 'stop'],
+        ['storm-1', 'ALPHA LIVE', '阿尔法', null, '2401', null, null, 'start'],
+        [null, 'INVALID', '无效', null, '2499', null, null, 'stop'],
+        'not-an-array',
+    ]);
+
+    assert.deepEqual(items, [
+        {
+            id: 'storm-2',
+            no: '2411',
+            nameEn: 'YAGI',
+            nameCn: '摩羯',
+            sourceStatus: 'stop',
+        },
+        {
+            id: 'storm-1',
+            no: '2401',
+            nameEn: 'ALPHA LIVE',
+            nameCn: '阿尔法',
+            sourceStatus: 'start',
+        },
+    ]);
 });
 
 test('escapeHtml neutralizes remote text before it enters popup markup', () => {

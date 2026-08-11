@@ -20,6 +20,14 @@ export type TyphoonDisplayCandidate = StrongestCandidate & {
     latestObservationTime?: unknown;
 };
 
+export type HistoricalTyphoonListItem = {
+    id: string;
+    no: string;
+    nameEn: string;
+    nameCn: string;
+    sourceStatus: 'start' | 'stop' | 'unknown';
+};
+
 const UNKNOWN_WIND: BeaufortInfo = {
     text: '风速暂无数据',
     color: '#595959',
@@ -62,6 +70,53 @@ export function isValidLatLng(latValue: unknown, lngValue: unknown): boolean {
     const lat = toFiniteNumber(latValue);
     const lng = toFiniteNumber(lngValue);
     return lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+export function normalizeHistoricalTyphoonList(rawList: unknown): HistoricalTyphoonListItem[] {
+    if (!Array.isArray(rawList)) {
+        return [];
+    }
+
+    const byId = new Map<string, HistoricalTyphoonListItem>();
+
+    for (const rawItem of rawList) {
+        if (!Array.isArray(rawItem) || rawItem[0] === null || rawItem[0] === undefined) {
+            continue;
+        }
+
+        const id = String(rawItem[0]).trim();
+        if (!id) {
+            continue;
+        }
+
+        const rawStatus = rawItem[7];
+        const item: HistoricalTyphoonListItem = {
+            id,
+            no: String(rawItem[4] ?? '').trim(),
+            nameEn: String(rawItem[1] ?? '').trim(),
+            nameCn: String(rawItem[2] ?? '').trim(),
+            sourceStatus:
+                rawStatus === 'start' ? 'start' : rawStatus === 'stop' ? 'stop' : 'unknown',
+        };
+
+        const existing = byId.get(id);
+        if (!existing || item.sourceStatus === 'start') {
+            byId.set(id, item);
+        }
+    }
+
+    return [...byId.values()].sort((left, right) => {
+        const leftNo = Number(left.no);
+        const rightNo = Number(right.no);
+        if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
+            return rightNo - leftNo;
+        }
+
+        return right.no.localeCompare(left.no, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        });
+    });
 }
 
 export function escapeHtml(value: unknown): string {
@@ -158,22 +213,102 @@ function parseSourceTime(value: string): Date | null {
     const day = Number.parseInt(value.substring(6, 8), 10);
     const hour = Number.parseInt(value.substring(8, 10), 10);
     const minute = Number.parseInt(value.substring(10, 12), 10);
-    if (![year, month, day, hour, minute].every(Number.isFinite)) {
+    const second = value.length === 14 ? Number.parseInt(value.substring(12, 14), 10) : 0;
+    if (![year, month, day, hour, minute, second].every(Number.isFinite)) {
         return null;
     }
 
-    const result = new Date(Date.UTC(year, month, day, hour, minute, 0));
+    const result = new Date(Date.UTC(year, month, day, hour, minute, second));
     if (
         result.getUTCFullYear() !== year ||
         result.getUTCMonth() !== month ||
         result.getUTCDate() !== day ||
         result.getUTCHours() !== hour ||
-        result.getUTCMinutes() !== minute
+        result.getUTCMinutes() !== minute ||
+        result.getUTCSeconds() !== second
     ) {
         return null;
     }
 
     return result;
+}
+
+function getBeijingOneYearCutoff(now: Date): Date | null {
+    if (!Number.isFinite(now.getTime())) {
+        return null;
+    }
+
+    const beijingNow = new Date(now.getTime() + 8 * 3600 * 1000);
+    const targetYear = beijingNow.getUTCFullYear() - 1;
+    const month = beijingNow.getUTCMonth();
+    const maximumDay = new Date(Date.UTC(targetYear, month + 1, 0)).getUTCDate();
+    const day = Math.min(beijingNow.getUTCDate(), maximumDay);
+    const beijingCutoffAsUtc = Date.UTC(
+        targetYear,
+        month,
+        day,
+        beijingNow.getUTCHours(),
+        beijingNow.getUTCMinutes(),
+        0,
+        0,
+    );
+
+    return new Date(beijingCutoffAsUtc - 8 * 3600 * 1000);
+}
+
+export function getFirstObservationTime(rawData: unknown): string {
+    if (!Array.isArray(rawData)) {
+        return '';
+    }
+
+    const points = rawData[8];
+    if (!Array.isArray(points)) {
+        return '';
+    }
+
+    let earliestValue = '';
+    let earliestTime = Number.POSITIVE_INFINITY;
+    for (const point of points) {
+        if (!Array.isArray(point) || typeof point[1] !== 'string') {
+            continue;
+        }
+
+        const parsed = parseSourceTime(point[1]);
+        if (parsed && parsed.getTime() < earliestTime) {
+            earliestValue = point[1];
+            earliestTime = parsed.getTime();
+        }
+    }
+
+    return earliestValue;
+}
+
+export function selectTyphoonsGeneratedWithinOneYear<
+    T extends { generationTime: unknown },
+>(items: T[], now: Date): T[] {
+    const cutoff = getBeijingOneYearCutoff(now);
+    if (!cutoff) {
+        return [];
+    }
+
+    const nowTime = now.getTime();
+    const cutoffTime = cutoff.getTime();
+    return items
+        .filter(item => {
+            if (typeof item.generationTime !== 'string') {
+                return false;
+            }
+
+            const generationTime = parseSourceTime(item.generationTime)?.getTime();
+            return (
+                generationTime !== undefined &&
+                generationTime >= cutoffTime &&
+                generationTime <= nowTime
+            );
+        })
+        .sort((left, right) =>
+            String(right.generationTime).localeCompare(String(left.generationTime)),
+        );
 }
 
 function formatBeijingTime(date: Date): string {

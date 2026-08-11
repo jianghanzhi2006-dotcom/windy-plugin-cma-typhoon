@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1786232367443,
-  "builtReadable": "2026-08-08T23:39:27.443Z",
+  "built": 1786423807611,
+  "builtReadable": "2026-08-11T04:50:07.611Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -57,6 +57,15 @@ function safe_not_equal(a, b) {
 function is_empty(obj) {
 	return Object.keys(obj).length === 0;
 }
+
+/** @type {typeof globalThis} */
+const globals =
+	typeof window !== 'undefined'
+		? window
+		: typeof globalThis !== 'undefined'
+		? globalThis
+		: // @ts-ignore Node typings have this
+		  global;
 
 /**
  * @param {Node} target
@@ -207,6 +216,13 @@ function set_style(node, key, value, important) {
 	} else {
 		node.style.setProperty(key, value, '');
 	}
+}
+
+/**
+ * @returns {void} */
+function toggle_class(element, name, toggle) {
+	// The `!!` is required because an `undefined` flag means flipping the current state.
+	element.classList.toggle(name, !!toggle);
 }
 
 /**
@@ -446,6 +462,98 @@ function ensure_array_like(array_like_or_iterator) {
 	return array_like_or_iterator?.length !== undefined
 		? array_like_or_iterator
 		: Array.from(array_like_or_iterator);
+}
+
+// keyed each functions:
+
+/** @returns {void} */
+function destroy_block(block, lookup) {
+	block.d(1);
+	lookup.delete(block.key);
+}
+
+/** @returns {any[]} */
+function update_keyed_each(
+	old_blocks,
+	dirty,
+	get_key,
+	dynamic,
+	ctx,
+	list,
+	lookup,
+	node,
+	destroy,
+	create_each_block,
+	next,
+	get_context
+) {
+	let o = old_blocks.length;
+	let n = list.length;
+	let i = o;
+	const old_indexes = {};
+	while (i--) old_indexes[old_blocks[i].key] = i;
+	const new_blocks = [];
+	const new_lookup = new Map();
+	const deltas = new Map();
+	const updates = [];
+	i = n;
+	while (i--) {
+		const child_ctx = get_context(ctx, list, i);
+		const key = get_key(child_ctx);
+		let block = lookup.get(key);
+		if (!block) {
+			block = create_each_block(key, child_ctx);
+			block.c();
+		} else {
+			// defer updates until all the DOM shuffling is done
+			updates.push(() => block.p(child_ctx, dirty));
+		}
+		new_lookup.set(key, (new_blocks[i] = block));
+		if (key in old_indexes) deltas.set(key, Math.abs(i - old_indexes[key]));
+	}
+	const will_move = new Set();
+	const did_move = new Set();
+	/** @returns {void} */
+	function insert(block) {
+		transition_in(block, 1);
+		block.m(node, next);
+		lookup.set(block.key, block);
+		next = block.first;
+		n--;
+	}
+	while (o && n) {
+		const new_block = new_blocks[n - 1];
+		const old_block = old_blocks[o - 1];
+		const new_key = new_block.key;
+		const old_key = old_block.key;
+		if (new_block === old_block) {
+			// do nothing
+			next = new_block.first;
+			o--;
+			n--;
+		} else if (!new_lookup.has(old_key)) {
+			// remove old block
+			destroy(old_block, lookup);
+			o--;
+		} else if (!lookup.has(new_key) || will_move.has(new_key)) {
+			insert(new_block);
+		} else if (did_move.has(old_key)) {
+			o--;
+		} else if (deltas.get(new_key) > deltas.get(old_key)) {
+			did_move.add(new_key);
+			insert(new_block);
+		} else {
+			will_move.add(old_key);
+			o--;
+		}
+	}
+	while (o--) {
+		const old_block = old_blocks[o];
+		if (!new_lookup.has(old_block.key)) destroy(old_block, lookup);
+	}
+	while (n) insert(new_blocks[n - 1]);
+	run_all(updates);
+	return new_blocks;
 }
 
 /** @returns {void} */
@@ -689,6 +797,46 @@ function isValidLatLng(latValue, lngValue) {
     const lng = toFiniteNumber(lngValue);
     return lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
+function normalizeHistoricalTyphoonList(rawList) {
+    if (!Array.isArray(rawList)) {
+        return [];
+    }
+    const byId = new Map();
+    for (const rawItem of rawList){
+        if (!Array.isArray(rawItem) || rawItem[0] === null || rawItem[0] === undefined) {
+            continue;
+        }
+        const id = String(rawItem[0]).trim();
+        if (!id) {
+            continue;
+        }
+        const rawStatus = rawItem[7];
+        const item = {
+            id,
+            no: String(rawItem[4] ?? '').trim(),
+            nameEn: String(rawItem[1] ?? '').trim(),
+            nameCn: String(rawItem[2] ?? '').trim(),
+            sourceStatus: rawStatus === 'start' ? 'start' : rawStatus === 'stop' ? 'stop' : 'unknown'
+        };
+        const existing = byId.get(id);
+        if (!existing || item.sourceStatus === 'start') {
+            byId.set(id, item);
+        }
+    }
+    return [
+        ...byId.values()
+    ].sort((left, right)=>{
+        const leftNo = Number(left.no);
+        const rightNo = Number(right.no);
+        if (Number.isFinite(leftNo) && Number.isFinite(rightNo) && leftNo !== rightNo) {
+            return rightNo - leftNo;
+        }
+        return right.no.localeCompare(left.no, undefined, {
+            numeric: true,
+            sensitivity: 'base'
+        });
+    });
+}
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (character)=>{
         const entities = {
@@ -852,20 +1000,71 @@ function parseSourceTime(value) {
     const day = Number.parseInt(value.substring(6, 8), 10);
     const hour = Number.parseInt(value.substring(8, 10), 10);
     const minute = Number.parseInt(value.substring(10, 12), 10);
+    const second = value.length === 14 ? Number.parseInt(value.substring(12, 14), 10) : 0;
     if (![
         year,
         month,
         day,
         hour,
-        minute
+        minute,
+        second
     ].every(Number.isFinite)) {
         return null;
     }
-    const result = new Date(Date.UTC(year, month, day, hour, minute, 0));
-    if (result.getUTCFullYear() !== year || result.getUTCMonth() !== month || result.getUTCDate() !== day || result.getUTCHours() !== hour || result.getUTCMinutes() !== minute) {
+    const result = new Date(Date.UTC(year, month, day, hour, minute, second));
+    if (result.getUTCFullYear() !== year || result.getUTCMonth() !== month || result.getUTCDate() !== day || result.getUTCHours() !== hour || result.getUTCMinutes() !== minute || result.getUTCSeconds() !== second) {
         return null;
     }
     return result;
+}
+function getBeijingOneYearCutoff(now) {
+    if (!Number.isFinite(now.getTime())) {
+        return null;
+    }
+    const beijingNow = new Date(now.getTime() + 8 * 3600 * 1000);
+    const targetYear = beijingNow.getUTCFullYear() - 1;
+    const month = beijingNow.getUTCMonth();
+    const maximumDay = new Date(Date.UTC(targetYear, month + 1, 0)).getUTCDate();
+    const day = Math.min(beijingNow.getUTCDate(), maximumDay);
+    const beijingCutoffAsUtc = Date.UTC(targetYear, month, day, beijingNow.getUTCHours(), beijingNow.getUTCMinutes(), 0, 0);
+    return new Date(beijingCutoffAsUtc - 8 * 3600 * 1000);
+}
+function getFirstObservationTime(rawData) {
+    if (!Array.isArray(rawData)) {
+        return '';
+    }
+    const points = rawData[8];
+    if (!Array.isArray(points)) {
+        return '';
+    }
+    let earliestValue = '';
+    let earliestTime = Number.POSITIVE_INFINITY;
+    for (const point of points){
+        if (!Array.isArray(point) || typeof point[1] !== 'string') {
+            continue;
+        }
+        const parsed = parseSourceTime(point[1]);
+        if (parsed && parsed.getTime() < earliestTime) {
+            earliestValue = point[1];
+            earliestTime = parsed.getTime();
+        }
+    }
+    return earliestValue;
+}
+function selectTyphoonsGeneratedWithinOneYear(items, now) {
+    const cutoff = getBeijingOneYearCutoff(now);
+    if (!cutoff) {
+        return [];
+    }
+    const nowTime = now.getTime();
+    const cutoffTime = cutoff.getTime();
+    return items.filter((item)=>{
+        if (typeof item.generationTime !== 'string') {
+            return false;
+        }
+        const generationTime = parseSourceTime(item.generationTime)?.getTime();
+        return generationTime !== undefined && generationTime >= cutoffTime && generationTime <= nowTime;
+    }).sort((left, right)=>String(right.generationTime).localeCompare(String(left.generationTime)));
 }
 function formatBeijingTime(date) {
     const beijingDate = new Date(date.getTime() + 8 * 3600 * 1000);
@@ -978,33 +1177,54 @@ function findStrongestTyphoon(items) {
 
 /* src\plugin.svelte generated by Svelte v4.2.20 */
 
+const { Map: Map_1 } = globals;
+
 function add_css(target) {
-	append_styles(target, "svelte-1ke6024", ".plugin__content.svelte-1ke6024{color:#fff}");
+	append_styles(target, "svelte-9z60az", ".plugin__content.svelte-9z60az.svelte-9z60az{color:#fff}.history-query.svelte-9z60az.svelte-9z60az{margin-top:14px;padding-top:12px;border-top:1px solid #333}.history-query__toggle.svelte-9z60az.svelte-9z60az{width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 2px;border:0;background:transparent;color:#d9d9d9;font:inherit;font-size:14px;font-weight:700;text-align:left;cursor:pointer}.history-query__chevron.svelte-9z60az.svelte-9z60az{width:14px;flex:0 0 auto;color:#8c8c8c;font-size:11px;text-align:center}.history-query__toggle-meta.svelte-9z60az.svelte-9z60az{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px}.history-query__path-state.svelte-9z60az.svelte-9z60az{color:#8c8c8c;font-size:11px;font-weight:500}.history-query__path-state--visible.svelte-9z60az.svelte-9z60az{color:#69c0ff}.history-query__body.svelte-9z60az.svelte-9z60az{padding:10px 0 2px;border-top:1px solid #2d2d2d}.history-query__hint.svelte-9z60az.svelte-9z60az{margin:0 0 10px;color:#a6a6a6;font-size:12px;line-height:1.5}.history-query__status-row.svelte-9z60az.svelte-9z60az{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.history-query__status.svelte-9z60az.svelte-9z60az{min-width:0;color:#bfbfbf;font-size:12px;line-height:1.5}.history-query__retry-action.svelte-9z60az.svelte-9z60az{flex:0 0 auto;min-height:28px;padding:0 8px;border:1px solid #1890ff;border-radius:4px;background:transparent;color:#69c0ff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.history-query__retry-action.svelte-9z60az.svelte-9z60az:hover{background:rgba(24, 144, 255, 0.1)}.history-query__selected-path.svelte-9z60az.svelte-9z60az{margin-top:10px}.history-query__selected.svelte-9z60az.svelte-9z60az{padding:9px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #333;border-bottom:1px solid #333}.history-query__selected-name.svelte-9z60az.svelte-9z60az{min-width:0;display:flex;flex-direction:column;gap:2px;color:#8c8c8c;font-size:11px}.history-query__selected-name.svelte-9z60az strong.svelte-9z60az{overflow:hidden;color:#69c0ff;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.history-query__selected-actions.svelte-9z60az.svelte-9z60az{flex:0 0 auto;display:inline-flex;align-items:center;gap:9px}.history-query__switch.svelte-9z60az.svelte-9z60az{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;color:#d9d9d9;font-size:12px;cursor:pointer}.history-query__switch.svelte-9z60az input.svelte-9z60az{width:17px;height:17px;margin:0;accent-color:#1890ff;cursor:pointer}.history-query__remove-action.svelte-9z60az.svelte-9z60az{min-height:28px;padding:0 8px;border:1px solid #595959;border-radius:4px;background:transparent;color:#bfbfbf;font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:border-color 0.16s ease, color 0.16s ease, background 0.16s ease}.history-query__remove-action.svelte-9z60az.svelte-9z60az:hover{border-color:#ff7875;background:rgba(255, 77, 79, 0.08);color:#ff7875}.history-wind-list.svelte-9z60az.svelte-9z60az{margin-top:8px;padding-bottom:10px;border-bottom:1px solid #333}.history-wind-list__toggle.svelte-9z60az.svelte-9z60az{box-sizing:border-box;width:100%;min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 2px;border:0;background:transparent;color:#d9d9d9;font:inherit;font-size:12px;font-weight:700;text-align:left;cursor:pointer}.history-wind-list__toggle-meta.svelte-9z60az.svelte-9z60az{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;color:#8c8c8c;font-size:11px;font-weight:500}.history-wind-list__hint.svelte-9z60az.svelte-9z60az{margin:0 2px 7px;color:#8c8c8c;font-size:11px;line-height:1.45}.history-wind-list__points.svelte-9z60az.svelte-9z60az{max-height:520px;overflow-y:auto;padding-right:4px}.history-wind-list__point.svelte-9z60az.svelte-9z60az{box-sizing:border-box;width:100%;min-height:58px;display:grid;grid-template-columns:64px 48px minmax(108px, 126px);align-items:center;justify-content:space-between;column-gap:8px;margin-bottom:6px;padding:8px 12px;border:1px solid #383838;border-radius:6px;background:#262626;color:#fff;font:inherit;font-size:13px;text-align:left;cursor:pointer;transition:background 0.16s ease, border-color 0.16s ease}.history-wind-list__point.svelte-9z60az.svelte-9z60az:hover{background:#2d2d2d;border-color:#4a4a4a}.history-wind-list__point--latest.svelte-9z60az.svelte-9z60az{border:1.5px solid #1890ff;background:#132738;box-shadow:0 0 8px rgba(24, 144, 255, 0.35)}.history-wind-list__time.svelte-9z60az.svelte-9z60az,.history-wind-list__pressure.svelte-9z60az.svelte-9z60az{min-width:0;display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;font-variant-numeric:tabular-nums}.history-wind-list__time.svelte-9z60az span.svelte-9z60az,.history-wind-list__pressure.svelte-9z60az span.svelte-9z60az{white-space:nowrap}.history-wind-list__point--latest.svelte-9z60az .history-wind-list__time.svelte-9z60az{color:#40a9ff;font-weight:700}.history-wind-list__pressure.svelte-9z60az.svelte-9z60az{color:#aaa;font-size:12px}.history-wind-list__level.svelte-9z60az.svelte-9z60az{box-sizing:border-box;width:100%;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 6px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.2;text-align:center}.history-wind-list__level.svelte-9z60az>span.svelte-9z60az{white-space:nowrap}.history-wind-list__speed.svelte-9z60az.svelte-9z60az{margin-top:2px;font-size:12px;opacity:0.95}.history-wind-list__qualifier.svelte-9z60az.svelte-9z60az{margin-left:4px;padding:0 3px;border:1px solid currentColor;border-radius:3px;font-size:10px;opacity:0.9}.history-query__result-meta.svelte-9z60az.svelte-9z60az{margin:7px 0 5px;color:#737373;font-size:11px}.history-query__results.svelte-9z60az.svelte-9z60az{max-height:280px;overflow-y:auto;border-top:1px solid #333}.history-query__result.svelte-9z60az.svelte-9z60az{box-sizing:border-box;width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 4px;border:0;border-bottom:1px solid #2d2d2d;background:transparent;color:#fff;font:inherit;text-align:left;cursor:pointer;transition:background 0.16s ease, opacity 0.16s ease}.history-query__result.svelte-9z60az.svelte-9z60az:hover:not(:disabled),.history-query__result--selected.svelte-9z60az.svelte-9z60az{background:rgba(24, 144, 255, 0.1)}.history-query__result.svelte-9z60az.svelte-9z60az:disabled{cursor:not-allowed;opacity:0.62}.history-query__result-name.svelte-9z60az.svelte-9z60az{min-width:0;display:flex;flex-direction:column;gap:2px}.history-query__result-name.svelte-9z60az strong.svelte-9z60az,.history-query__result-name.svelte-9z60az span.svelte-9z60az{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.history-query__result-name.svelte-9z60az strong.svelte-9z60az{color:#f0f0f0;font-size:13px}.history-query__result-name.svelte-9z60az span.svelte-9z60az{color:#8c8c8c;font-size:11px}.history-query__result-action.svelte-9z60az.svelte-9z60az{flex:0 0 auto;color:#69c0ff;font-size:12px;font-weight:600}.history-query__toggle.svelte-9z60az.svelte-9z60az:focus-visible,.history-query__retry-action.svelte-9z60az.svelte-9z60az:focus-visible,.history-query__remove-action.svelte-9z60az.svelte-9z60az:focus-visible,.history-query__result.svelte-9z60az.svelte-9z60az:focus-visible,.history-wind-list__toggle.svelte-9z60az.svelte-9z60az:focus-visible,.history-wind-list__point.svelte-9z60az.svelte-9z60az:focus-visible{outline:2px solid #69c0ff;outline-offset:2px}@media(max-width: 390px){.history-query__selected.svelte-9z60az.svelte-9z60az{align-items:flex-start;gap:8px}.history-query__selected-actions.svelte-9z60az.svelte-9z60az{gap:7px}.history-wind-list__point.svelte-9z60az.svelte-9z60az{grid-template-columns:56px 44px minmax(0, 1fr);column-gap:6px;padding:8px}}");
 }
 
 function get_each_context(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[32] = list[i];
+	child_ctx[72] = list[i];
 	return child_ctx;
 }
 
 function get_each_context_1(ctx, list, i) {
 	const child_ctx = ctx.slice();
-	child_ctx[35] = list[i];
-	child_ctx[37] = i;
+	child_ctx[75] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_2(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[78] = list[i];
+	child_ctx[80] = i;
+	return child_ctx;
+}
+
+function get_each_context_3(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[81] = list[i];
+	return child_ctx;
+}
+
+function get_each_context_4(ctx, list, i) {
+	const child_ctx = ctx.slice();
+	child_ctx[78] = list[i];
+	child_ctx[80] = i;
 	return child_ctx;
 }
 
 // (52:8) {#if typhoonListInfo.length > 0}
-function create_if_block(ctx) {
+function create_if_block_8(ctx) {
 	let div;
 	let h4;
 	let t1;
-	let each_value = ensure_array_like(/*typhoonListInfo*/ ctx[1]);
+	let each_value_3 = ensure_array_like(/*typhoonListInfo*/ ctx[1]);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value.length; i += 1) {
-		each_blocks[i] = create_each_block(get_each_context(ctx, each_value, i));
+	for (let i = 0; i < each_value_3.length; i += 1) {
+		each_blocks[i] = create_each_block_3(get_each_context_3(ctx, each_value_3, i));
 	}
 
 	return {
@@ -1036,17 +1256,17 @@ function create_if_block(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*typhoonListInfo, focusPoint, expandedTyphoonId, toggleTyphoonPanel*/ 202) {
-				each_value = ensure_array_like(/*typhoonListInfo*/ ctx[1]);
+			if (dirty[0] & /*typhoonListInfo, focusLivePoint, expandedTyphoonId, toggleTyphoonPanel*/ 24586) {
+				each_value_3 = ensure_array_like(/*typhoonListInfo*/ ctx[1]);
 				let i;
 
-				for (i = 0; i < each_value.length; i += 1) {
-					const child_ctx = get_each_context(ctx, each_value, i);
+				for (i = 0; i < each_value_3.length; i += 1) {
+					const child_ctx = get_each_context_3(ctx, each_value_3, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block(child_ctx);
+						each_blocks[i] = create_each_block_3(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(div, null);
 					}
@@ -1056,7 +1276,7 @@ function create_if_block(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value.length;
+				each_blocks.length = each_value_3.length;
 			}
 		},
 		d(detaching) {
@@ -1070,16 +1290,16 @@ function create_if_block(ctx) {
 }
 
 // (95:24) {#if expandedTyphoonId === item.id}
-function create_if_block_1(ctx) {
+function create_if_block_9(ctx) {
 	let div2;
 	let div0;
 	let t1;
 	let div1;
-	let each_value_1 = ensure_array_like(/*item*/ ctx[32].historyPoints);
+	let each_value_4 = ensure_array_like(/*item*/ ctx[81].historyPoints);
 	let each_blocks = [];
 
-	for (let i = 0; i < each_value_1.length; i += 1) {
-		each_blocks[i] = create_each_block_1(get_each_context_1(ctx, each_value_1, i));
+	for (let i = 0; i < each_value_4.length; i += 1) {
+		each_blocks[i] = create_each_block_4(get_each_context_4(ctx, each_value_4, i));
 	}
 
 	return {
@@ -1116,17 +1336,17 @@ function create_if_block_1(ctx) {
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*focusPoint, typhoonListInfo*/ 130) {
-				each_value_1 = ensure_array_like(/*item*/ ctx[32].historyPoints);
+			if (dirty[0] & /*focusLivePoint, typhoonListInfo*/ 16386) {
+				each_value_4 = ensure_array_like(/*item*/ ctx[81].historyPoints);
 				let i;
 
-				for (i = 0; i < each_value_1.length; i += 1) {
-					const child_ctx = get_each_context_1(ctx, each_value_1, i);
+				for (i = 0; i < each_value_4.length; i += 1) {
+					const child_ctx = get_each_context_4(ctx, each_value_4, i);
 
 					if (each_blocks[i]) {
 						each_blocks[i].p(child_ctx, dirty);
 					} else {
-						each_blocks[i] = create_each_block_1(child_ctx);
+						each_blocks[i] = create_each_block_4(child_ctx);
 						each_blocks[i].c();
 						each_blocks[i].m(div1, null);
 					}
@@ -1136,7 +1356,7 @@ function create_if_block_1(ctx) {
 					each_blocks[i].d(1);
 				}
 
-				each_blocks.length = each_value_1.length;
+				each_blocks.length = each_value_4.length;
 			}
 		},
 		d(detaching) {
@@ -1149,10 +1369,10 @@ function create_if_block_1(ctx) {
 	};
 }
 
-// (167:72) {#if pt.bft.qualifier}
-function create_if_block_2(ctx) {
+// (170:72) {#if pt.bft.qualifier}
+function create_if_block_10(ctx) {
 	let span;
-	let t_value = /*pt*/ ctx[35].bft.qualifier + "";
+	let t_value = /*pt*/ ctx[78].bft.qualifier + "";
 	let t;
 
 	return {
@@ -1171,7 +1391,7 @@ function create_if_block_2(ctx) {
 			append(span, t);
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[35].bft.qualifier + "")) set_data(t, t_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t_value !== (t_value = /*pt*/ ctx[78].bft.qualifier + "")) set_data(t, t_value);
 		},
 		d(detaching) {
 			if (detaching) {
@@ -1182,45 +1402,45 @@ function create_if_block_2(ctx) {
 }
 
 // (105:36) {#each item.historyPoints as pt, idx}
-function create_each_block_1(ctx) {
+function create_each_block_4(ctx) {
 	let div3;
 	let div0;
 	let span0;
-	let t0_value = /*pt*/ ctx[35].displayDate + "";
+	let t0_value = /*pt*/ ctx[78].displayDate + "";
 	let t0;
 	let t1;
 	let span1;
-	let t2_value = /*pt*/ ctx[35].displayTime + "";
+	let t2_value = /*pt*/ ctx[78].displayTime + "";
 	let t2;
 	let t3;
 	let div1;
 	let span2;
-	let t4_value = /*pt*/ ctx[35].pressure + "";
+	let t4_value = /*pt*/ ctx[78].pressure + "";
 	let t4;
 	let t5;
 	let span3;
 	let t7;
 	let div2;
 	let span4;
-	let t8_value = /*pt*/ ctx[35].bft.text + "";
+	let t8_value = /*pt*/ ctx[78].bft.text + "";
 	let t8;
 	let t9;
 	let span5;
 	let t10;
-	let t11_value = /*pt*/ ctx[35].speedDisplay + "";
+	let t11_value = /*pt*/ ctx[78].speedDisplay + "";
 	let t11;
 	let t12;
 	let t13;
 	let mounted;
 	let dispose;
-	let if_block = /*pt*/ ctx[35].bft.qualifier && create_if_block_2(ctx);
+	let if_block = /*pt*/ ctx[78].bft.qualifier && create_if_block_10(ctx);
 
 	function click_handler_2() {
-		return /*click_handler_2*/ ctx[14](/*pt*/ ctx[35]);
+		return /*click_handler_2*/ ctx[32](/*item*/ ctx[81], /*pt*/ ctx[78]);
 	}
 
 	function keydown_handler_1(...args) {
-		return /*keydown_handler_1*/ ctx[15](/*pt*/ ctx[35], ...args);
+		return /*keydown_handler_1*/ ctx[33](/*item*/ ctx[81], /*pt*/ ctx[78], ...args);
 	}
 
 	return {
@@ -1250,11 +1470,11 @@ function create_each_block_1(ctx) {
 			t12 = text(")");
 			if (if_block) if_block.c();
 			t13 = space();
-			set_style(span0, "color", /*idx*/ ctx[37] === 0 ? '#40a9ff' : '#ffffff');
-			set_style(span0, "font-weight", /*idx*/ ctx[37] === 0 ? 'bold' : 'normal');
+			set_style(span0, "color", /*idx*/ ctx[80] === 0 ? '#40a9ff' : '#ffffff');
+			set_style(span0, "font-weight", /*idx*/ ctx[80] === 0 ? 'bold' : 'normal');
 			set_style(span0, "white-space", "nowrap");
-			set_style(span1, "color", /*idx*/ ctx[37] === 0 ? '#40a9ff' : '#ffffff');
-			set_style(span1, "font-weight", /*idx*/ ctx[37] === 0 ? 'bold' : 'normal');
+			set_style(span1, "color", /*idx*/ ctx[80] === 0 ? '#40a9ff' : '#ffffff');
+			set_style(span1, "font-weight", /*idx*/ ctx[80] === 0 ? 'bold' : 'normal');
 			set_style(span1, "white-space", "nowrap");
 			set_style(div0, "min-width", "0");
 			set_style(div0, "display", "flex");
@@ -1263,6 +1483,7 @@ function create_each_block_1(ctx) {
 			set_style(div0, "line-height", "1.25");
 			set_style(div0, "font-variant-numeric", "tabular-nums");
 			set_style(span2, "white-space", "nowrap");
+			attr(span3, "translate", "no");
 			set_style(span3, "white-space", "nowrap");
 			set_style(div1, "min-width", "0");
 			set_style(div1, "display", "flex");
@@ -1275,6 +1496,7 @@ function create_each_block_1(ctx) {
 			set_style(span4, "font-size", "13px");
 			set_style(span4, "line-height", "1.2");
 			set_style(span4, "white-space", "nowrap");
+			attr(span5, "translate", "no");
 			set_style(span5, "font-size", "12px");
 			set_style(span5, "line-height", "1.2");
 			set_style(span5, "opacity", "0.95");
@@ -1283,13 +1505,13 @@ function create_each_block_1(ctx) {
 			set_style(div2, "box-sizing", "border-box");
 			set_style(div2, "width", "100%");
 			set_style(div2, "min-width", "0");
-			set_style(div2, "background", /*pt*/ ctx[35].bft.color);
-			set_style(div2, "color", /*pt*/ ctx[35].bft.textColor);
+			set_style(div2, "background", /*pt*/ ctx[78].bft.color);
+			set_style(div2, "color", /*pt*/ ctx[78].bft.textColor);
 			set_style(div2, "padding", "4px 6px");
 			set_style(div2, "border-radius", "6px");
 			set_style(div2, "font-weight", "bold");
 
-			set_style(div2, "text-shadow", /*pt*/ ctx[35].bft.textColor === '#ffffff'
+			set_style(div2, "text-shadow", /*pt*/ ctx[78].bft.textColor === '#ffffff'
 			? '0 1px 2px rgba(0,0,0,0.8)'
 			: 'none');
 
@@ -1300,7 +1522,7 @@ function create_each_block_1(ctx) {
 			set_style(div2, "justify-content", "center");
 			attr(div3, "role", "button");
 			attr(div3, "tabindex", "0");
-			set_style(div3, "background", /*idx*/ ctx[37] === 0 ? '#132738' : '#262626');
+			set_style(div3, "background", /*idx*/ ctx[80] === 0 ? '#132738' : '#262626');
 			set_style(div3, "border-radius", "6px");
 			set_style(div3, "padding", "8px 12px");
 			set_style(div3, "margin-bottom", "6px");
@@ -1312,11 +1534,11 @@ function create_each_block_1(ctx) {
 			set_style(div3, "align-items", "center");
 			set_style(div3, "cursor", "pointer");
 
-			set_style(div3, "border", /*idx*/ ctx[37] === 0
+			set_style(div3, "border", /*idx*/ ctx[80] === 0
 			? '1.5px solid #1890ff'
 			: '1px solid #383838');
 
-			set_style(div3, "box-shadow", /*idx*/ ctx[37] === 0
+			set_style(div3, "box-shadow", /*idx*/ ctx[80] === 0
 			? '0 0 8px rgba(24,144,255,0.35)'
 			: 'none');
 
@@ -1359,17 +1581,17 @@ function create_each_block_1(ctx) {
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[35].displayDate + "")) set_data(t0, t0_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[35].displayTime + "")) set_data(t2, t2_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t4_value !== (t4_value = /*pt*/ ctx[35].pressure + "")) set_data(t4, t4_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[35].bft.text + "")) set_data(t8, t8_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t11_value !== (t11_value = /*pt*/ ctx[35].speedDisplay + "")) set_data(t11, t11_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t0_value !== (t0_value = /*pt*/ ctx[78].displayDate + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t2_value !== (t2_value = /*pt*/ ctx[78].displayTime + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t4_value !== (t4_value = /*pt*/ ctx[78].pressure + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t8_value !== (t8_value = /*pt*/ ctx[78].bft.text + "")) set_data(t8, t8_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t11_value !== (t11_value = /*pt*/ ctx[78].speedDisplay + "")) set_data(t11, t11_value);
 
-			if (/*pt*/ ctx[35].bft.qualifier) {
+			if (/*pt*/ ctx[78].bft.qualifier) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_2(ctx);
+					if_block = create_if_block_10(ctx);
 					if_block.c();
 					if_block.m(span5, null);
 				}
@@ -1379,15 +1601,15 @@ function create_each_block_1(ctx) {
 			}
 
 			if (dirty[0] & /*typhoonListInfo*/ 2) {
-				set_style(div2, "background", /*pt*/ ctx[35].bft.color);
+				set_style(div2, "background", /*pt*/ ctx[78].bft.color);
 			}
 
 			if (dirty[0] & /*typhoonListInfo*/ 2) {
-				set_style(div2, "color", /*pt*/ ctx[35].bft.textColor);
+				set_style(div2, "color", /*pt*/ ctx[78].bft.textColor);
 			}
 
 			if (dirty[0] & /*typhoonListInfo*/ 2) {
-				set_style(div2, "text-shadow", /*pt*/ ctx[35].bft.textColor === '#ffffff'
+				set_style(div2, "text-shadow", /*pt*/ ctx[78].bft.textColor === '#ffffff'
 				? '0 1px 2px rgba(0,0,0,0.8)'
 				: 'none');
 			}
@@ -1405,30 +1627,30 @@ function create_each_block_1(ctx) {
 }
 
 // (57:16) {#each typhoonListInfo as item}
-function create_each_block(ctx) {
+function create_each_block_3(ctx) {
 	let div;
 	let button;
 	let strong;
 	let t0;
-	let t1_value = /*item*/ ctx[32].no + "";
+	let t1_value = /*item*/ ctx[81].no + "";
 	let t1;
 	let t2;
-	let t3_value = /*item*/ ctx[32].nameCn + "";
+	let t3_value = /*item*/ ctx[81].nameCn + "";
 	let t3;
 	let t4;
-	let t5_value = /*item*/ ctx[32].nameEn + "";
+	let t5_value = /*item*/ ctx[81].nameEn + "";
 	let t5;
 	let t6;
 	let t7;
 	let span2;
 	let span0;
 	let t8;
-	let t9_value = /*item*/ ctx[32].status + "";
+	let t9_value = /*item*/ ctx[81].status + "";
 	let t9;
 	let t10;
 	let span1;
 
-	let t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+	let t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 	? '▼'
 	: '▶') + "";
 
@@ -1440,10 +1662,10 @@ function create_each_block(ctx) {
 	let dispose;
 
 	function click_handler_1() {
-		return /*click_handler_1*/ ctx[13](/*item*/ ctx[32]);
+		return /*click_handler_1*/ ctx[31](/*item*/ ctx[81]);
 	}
 
-	let if_block = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id && create_if_block_1(ctx);
+	let if_block = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id && create_if_block_9(ctx);
 
 	return {
 		c() {
@@ -1471,7 +1693,7 @@ function create_each_block(ctx) {
 			set_style(strong, "color", "#69c0ff");
 			set_style(strong, "font-size", "15px");
 
-			set_style(span0, "background", /*item*/ ctx[32].status === '进行中'
+			set_style(span0, "background", /*item*/ ctx[81].status === '进行中'
 			? '#275017'
 			: '#434343');
 
@@ -1491,24 +1713,24 @@ function create_each_block(ctx) {
 			set_style(span2, "gap", "7px");
 			set_style(span2, "flex-shrink", "0");
 			attr(button, "type", "button");
-			attr(button, "aria-expanded", button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id);
+			attr(button, "aria-expanded", button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id);
 			set_style(button, "width", "100%");
 			set_style(button, "display", "flex");
 			set_style(button, "justify-content", "space-between");
 			set_style(button, "align-items", "center");
 			set_style(button, "gap", "8px");
 
-			set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+			set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 			? '6px'
 			: '0'));
 
-			set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+			set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 			? '8px'
 			: '0'));
 
 			set_style(button, "border", "none");
 
-			set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+			set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 			? '1px solid #333'
 			: 'none');
 
@@ -1554,48 +1776,48 @@ function create_each_block(ctx) {
 		},
 		p(new_ctx, dirty) {
 			ctx = new_ctx;
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t1_value !== (t1_value = /*item*/ ctx[32].no + "")) set_data(t1, t1_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t3_value !== (t3_value = /*item*/ ctx[32].nameCn + "")) set_data(t3, t3_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*item*/ ctx[32].nameEn + "")) set_data(t5, t5_value);
-			if (dirty[0] & /*typhoonListInfo*/ 2 && t9_value !== (t9_value = /*item*/ ctx[32].status + "")) set_data(t9, t9_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t1_value !== (t1_value = /*item*/ ctx[81].no + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t3_value !== (t3_value = /*item*/ ctx[81].nameCn + "")) set_data(t3, t3_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t5_value !== (t5_value = /*item*/ ctx[81].nameEn + "")) set_data(t5, t5_value);
+			if (dirty[0] & /*typhoonListInfo*/ 2 && t9_value !== (t9_value = /*item*/ ctx[81].status + "")) set_data(t9, t9_value);
 
 			if (dirty[0] & /*typhoonListInfo*/ 2) {
-				set_style(span0, "background", /*item*/ ctx[32].status === '进行中'
+				set_style(span0, "background", /*item*/ ctx[81].status === '进行中'
 				? '#275017'
 				: '#434343');
 			}
 
-			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10 && t11_value !== (t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10 && t11_value !== (t11_value = (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 			? '▼'
 			: '▶') + "")) set_data(t11, t11_value);
 
-			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10 && button_aria_expanded_value !== (button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id)) {
+			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10 && button_aria_expanded_value !== (button_aria_expanded_value = /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id)) {
 				attr(button, "aria-expanded", button_aria_expanded_value);
 			}
 
 			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10) {
-				set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+				set_style(button, "padding", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 				? '6px'
 				: '0'));
 			}
 
 			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10) {
-				set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+				set_style(button, "margin", "0 0 " + (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 				? '8px'
 				: '0'));
 			}
 
 			if (dirty[0] & /*expandedTyphoonId, typhoonListInfo*/ 10) {
-				set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id
+				set_style(button, "border-bottom", /*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id
 				? '1px solid #333'
 				: 'none');
 			}
 
-			if (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[32].id) {
+			if (/*expandedTyphoonId*/ ctx[3] === /*item*/ ctx[81].id) {
 				if (if_block) {
 					if_block.p(ctx, dirty);
 				} else {
-					if_block = create_if_block_1(ctx);
+					if_block = create_if_block_9(ctx);
 					if_block.c();
 					if_block.m(div, t13);
 				}
@@ -1616,57 +1838,1014 @@ function create_each_block(ctx) {
 	};
 }
 
+// (207:12) {#if historyPanelOpen}
+function create_if_block(ctx) {
+	let div2;
+	let p;
+	let t1;
+	let div1;
+	let div0;
+	let t2;
+	let t3;
+	let t4;
+	let each_blocks = [];
+	let each_1_lookup = new Map_1();
+	let t5;
+	let if_block0 = /*historyLoadFailed*/ ctx[8] && !/*historyListLoading*/ ctx[7] && create_if_block_7(ctx);
+	let each_value_1 = ensure_array_like(/*historicalPaths*/ ctx[10]);
+	const get_key = ctx => /*selectedPath*/ ctx[75].item.id;
+
+	for (let i = 0; i < each_value_1.length; i += 1) {
+		let child_ctx = get_each_context_1(ctx, each_value_1, i);
+		let key = get_key(child_ctx);
+		each_1_lookup.set(key, each_blocks[i] = create_each_block_1(key, child_ctx));
+	}
+
+	let if_block1 = /*historyItems*/ ctx[5].length > 0 && create_if_block_1(ctx);
+
+	return {
+		c() {
+			div2 = element("div");
+			p = element("p");
+			p.textContent = "活跃台风可在此关闭或恢复路径且不占额度；最多同时显示 3 条停编历史路径，最多保留 6 条已选历史记录，超出时自动清理最早关闭的记录。";
+			t1 = space();
+			div1 = element("div");
+			div0 = element("div");
+			t2 = text(/*historyStatusText*/ ctx[6]);
+			t3 = space();
+			if (if_block0) if_block0.c();
+			t4 = space();
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			t5 = space();
+			if (if_block1) if_block1.c();
+			attr(p, "class", "history-query__hint svelte-9z60az");
+			attr(div0, "class", "history-query__status svelte-9z60az");
+			attr(div0, "aria-live", "polite");
+			attr(div1, "class", "history-query__status-row svelte-9z60az");
+			attr(div2, "class", "history-query__body svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, div2, anchor);
+			append(div2, p);
+			append(div2, t1);
+			append(div2, div1);
+			append(div1, div0);
+			append(div0, t2);
+			append(div1, t3);
+			if (if_block0) if_block0.m(div1, null);
+			append(div2, t4);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div2, null);
+				}
+			}
+
+			append(div2, t5);
+			if (if_block1) if_block1.m(div2, null);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*historyStatusText*/ 64) set_data(t2, /*historyStatusText*/ ctx[6]);
+
+			if (/*historyLoadFailed*/ ctx[8] && !/*historyListLoading*/ ctx[7]) {
+				if (if_block0) {
+					if_block0.p(ctx, dirty);
+				} else {
+					if_block0 = create_if_block_7(ctx);
+					if_block0.c();
+					if_block0.m(div1, null);
+				}
+			} else if (if_block0) {
+				if_block0.d(1);
+				if_block0 = null;
+			}
+
+			if (dirty[0] & /*historicalPaths, focusHistoricalPoint, toggleHistoricalWindList, removeHistoricalPath, handleHistoricalPathToggle*/ 14713856) {
+				each_value_1 = ensure_array_like(/*historicalPaths*/ ctx[10]);
+				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value_1, each_1_lookup, div2, destroy_block, create_each_block_1, t5, get_each_context_1);
+			}
+
+			if (/*historyItems*/ ctx[5].length > 0) {
+				if (if_block1) {
+					if_block1.p(ctx, dirty);
+				} else {
+					if_block1 = create_if_block_1(ctx);
+					if_block1.c();
+					if_block1.m(div2, null);
+				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div2);
+			}
+
+			if (if_block0) if_block0.d();
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].d();
+			}
+
+			if (if_block1) if_block1.d();
+		}
+	};
+}
+
+// (217:24) {#if historyLoadFailed && !historyListLoading}
+function create_if_block_7(ctx) {
+	let button;
+	let mounted;
+	let dispose;
+
+	return {
+		c() {
+			button = element("button");
+			button.textContent = "重试";
+			attr(button, "type", "button");
+			attr(button, "class", "history-query__retry-action svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, button, anchor);
+
+			if (!mounted) {
+				dispose = listen(button, "click", /*click_handler_4*/ ctx[35]);
+				mounted = true;
+			}
+		},
+		p: noop,
+		d(detaching) {
+			if (detaching) {
+				detach(button);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (256:36) {#if selectedPath.source === 'history'}
+function create_if_block_6(ctx) {
+	let button;
+	let mounted;
+	let dispose;
+
+	function click_handler_5() {
+		return /*click_handler_5*/ ctx[37](/*selectedPath*/ ctx[75]);
+	}
+
+	return {
+		c() {
+			button = element("button");
+			button.textContent = "移除";
+			attr(button, "type", "button");
+			attr(button, "class", "history-query__remove-action svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, button, anchor);
+
+			if (!mounted) {
+				dispose = listen(button, "click", click_handler_5);
+				mounted = true;
+			}
+		},
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(button);
+			}
+
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (269:28) {#if selectedPath.source === 'history'}
+function create_if_block_3(ctx) {
+	let div;
+	let button;
+	let span0;
+	let t1;
+	let span2;
+	let t2_value = /*selectedPath*/ ctx[75].rendered.historyPoints.length + "";
+	let t2;
+	let t3;
+	let span1;
+	let t4_value = (/*selectedPath*/ ctx[75].windListOpen ? '▼' : '▶') + "";
+	let t4;
+	let button_aria_expanded_value;
+	let t5;
+	let mounted;
+	let dispose;
+
+	function click_handler_6() {
+		return /*click_handler_6*/ ctx[38](/*selectedPath*/ ctx[75]);
+	}
+
+	let if_block = /*selectedPath*/ ctx[75].windListOpen && create_if_block_4(ctx);
+
+	return {
+		c() {
+			div = element("div");
+			button = element("button");
+			span0 = element("span");
+			span0.textContent = "📜 风力演变";
+			t1 = space();
+			span2 = element("span");
+			t2 = text(t2_value);
+			t3 = text(" 个实况点\n                                            ");
+			span1 = element("span");
+			t4 = text(t4_value);
+			t5 = space();
+			if (if_block) if_block.c();
+			attr(span1, "aria-hidden", "true");
+			attr(span2, "class", "history-wind-list__toggle-meta svelte-9z60az");
+			attr(button, "type", "button");
+			attr(button, "class", "history-wind-list__toggle svelte-9z60az");
+			attr(button, "aria-expanded", button_aria_expanded_value = /*selectedPath*/ ctx[75].windListOpen);
+			attr(div, "class", "history-wind-list svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, div, anchor);
+			append(div, button);
+			append(button, span0);
+			append(button, t1);
+			append(button, span2);
+			append(span2, t2);
+			append(span2, t3);
+			append(span2, span1);
+			append(span1, t4);
+			append(div, t5);
+			if (if_block) if_block.m(div, null);
+
+			if (!mounted) {
+				dispose = listen(button, "click", click_handler_6);
+				mounted = true;
+			}
+		},
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+			if (dirty[0] & /*historicalPaths*/ 1024 && t2_value !== (t2_value = /*selectedPath*/ ctx[75].rendered.historyPoints.length + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t4_value !== (t4_value = (/*selectedPath*/ ctx[75].windListOpen ? '▼' : '▶') + "")) set_data(t4, t4_value);
+
+			if (dirty[0] & /*historicalPaths*/ 1024 && button_aria_expanded_value !== (button_aria_expanded_value = /*selectedPath*/ ctx[75].windListOpen)) {
+				attr(button, "aria-expanded", button_aria_expanded_value);
+			}
+
+			if (/*selectedPath*/ ctx[75].windListOpen) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block_4(ctx);
+					if_block.c();
+					if_block.m(div, null);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div);
+			}
+
+			if (if_block) if_block.d();
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (287:36) {#if selectedPath.windListOpen}
+function create_if_block_4(ctx) {
+	let div0;
+	let t1;
+	let div1;
+	let each_value_2 = ensure_array_like(/*selectedPath*/ ctx[75].rendered.historyPoints);
+	let each_blocks = [];
+
+	for (let i = 0; i < each_value_2.length; i += 1) {
+		each_blocks[i] = create_each_block_2(get_each_context_2(ctx, each_value_2, i));
+	}
+
+	return {
+		c() {
+			div0 = element("div");
+			div0.textContent = "最新在顶部，点击任一记录只打开该点弹窗，不移动地图视野。";
+			t1 = space();
+			div1 = element("div");
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			attr(div0, "class", "history-wind-list__hint svelte-9z60az");
+			attr(div1, "class", "history-wind-list__points svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, div0, anchor);
+			insert(target, t1, anchor);
+			insert(target, div1, anchor);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div1, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*focusHistoricalPoint, historicalPaths*/ 33792) {
+				each_value_2 = ensure_array_like(/*selectedPath*/ ctx[75].rendered.historyPoints);
+				let i;
+
+				for (i = 0; i < each_value_2.length; i += 1) {
+					const child_ctx = get_each_context_2(ctx, each_value_2, i);
+
+					if (each_blocks[i]) {
+						each_blocks[i].p(child_ctx, dirty);
+					} else {
+						each_blocks[i] = create_each_block_2(child_ctx);
+						each_blocks[i].c();
+						each_blocks[i].m(div1, null);
+					}
+				}
+
+				for (; i < each_blocks.length; i += 1) {
+					each_blocks[i].d(1);
+				}
+
+				each_blocks.length = each_value_2.length;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div0);
+				detach(t1);
+				detach(div1);
+			}
+
+			destroy_each(each_blocks, detaching);
+		}
+	};
+}
+
+// (323:80) {#if pt.bft.qualifier}
+function create_if_block_5(ctx) {
+	let span;
+	let t_value = /*pt*/ ctx[78].bft.qualifier + "";
+	let t;
+
+	return {
+		c() {
+			span = element("span");
+			t = text(t_value);
+			attr(span, "class", "history-wind-list__qualifier svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+			append(span, t);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*historicalPaths*/ 1024 && t_value !== (t_value = /*pt*/ ctx[78].bft.qualifier + "")) set_data(t, t_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (292:44) {#each selectedPath.rendered.historyPoints as pt, idx}
+function create_each_block_2(ctx) {
+	let button;
+	let span2;
+	let span0;
+	let t0_value = /*pt*/ ctx[78].displayDate + "";
+	let t0;
+	let t1;
+	let span1;
+	let t2_value = /*pt*/ ctx[78].displayTime + "";
+	let t2;
+	let t3;
+	let span5;
+	let span3;
+	let t4_value = /*pt*/ ctx[78].pressure + "";
+	let t4;
+	let t5;
+	let span4;
+	let t7;
+	let span8;
+	let span6;
+	let t8_value = /*pt*/ ctx[78].bft.text + "";
+	let t8;
+	let t9;
+	let span7;
+	let t10;
+	let t11_value = /*pt*/ ctx[78].speedDisplay + "";
+	let t11;
+	let t12;
+	let mounted;
+	let dispose;
+	let if_block = /*pt*/ ctx[78].bft.qualifier && create_if_block_5(ctx);
+
+	function click_handler_7() {
+		return /*click_handler_7*/ ctx[39](/*selectedPath*/ ctx[75], /*pt*/ ctx[78]);
+	}
+
+	return {
+		c() {
+			button = element("button");
+			span2 = element("span");
+			span0 = element("span");
+			t0 = text(t0_value);
+			t1 = space();
+			span1 = element("span");
+			t2 = text(t2_value);
+			t3 = space();
+			span5 = element("span");
+			span3 = element("span");
+			t4 = text(t4_value);
+			t5 = space();
+			span4 = element("span");
+			span4.textContent = "hPa";
+			t7 = space();
+			span8 = element("span");
+			span6 = element("span");
+			t8 = text(t8_value);
+			t9 = space();
+			span7 = element("span");
+			t10 = text("(");
+			t11 = text(t11_value);
+			t12 = text(")");
+			if (if_block) if_block.c();
+			attr(span0, "class", "svelte-9z60az");
+			attr(span1, "class", "svelte-9z60az");
+			attr(span2, "class", "history-wind-list__time svelte-9z60az");
+			attr(span3, "class", "svelte-9z60az");
+			attr(span4, "translate", "no");
+			attr(span4, "class", "svelte-9z60az");
+			attr(span5, "class", "history-wind-list__pressure svelte-9z60az");
+			attr(span6, "class", "svelte-9z60az");
+			attr(span7, "translate", "no");
+			attr(span7, "class", "history-wind-list__speed svelte-9z60az");
+			attr(span8, "class", "history-wind-list__level svelte-9z60az");
+			set_style(span8, "background", /*pt*/ ctx[78].bft.color);
+			set_style(span8, "color", /*pt*/ ctx[78].bft.textColor);
+
+			set_style(span8, "text-shadow", /*pt*/ ctx[78].bft.textColor === '#ffffff'
+			? '0 1px 2px rgba(0,0,0,0.8)'
+			: 'none');
+
+			attr(button, "type", "button");
+			attr(button, "class", "history-wind-list__point svelte-9z60az");
+			toggle_class(button, "history-wind-list__point--latest", /*idx*/ ctx[80] === 0);
+		},
+		m(target, anchor) {
+			insert(target, button, anchor);
+			append(button, span2);
+			append(span2, span0);
+			append(span0, t0);
+			append(span2, t1);
+			append(span2, span1);
+			append(span1, t2);
+			append(button, t3);
+			append(button, span5);
+			append(span5, span3);
+			append(span3, t4);
+			append(span5, t5);
+			append(span5, span4);
+			append(button, t7);
+			append(button, span8);
+			append(span8, span6);
+			append(span6, t8);
+			append(span8, t9);
+			append(span8, span7);
+			append(span7, t10);
+			append(span7, t11);
+			append(span7, t12);
+			if (if_block) if_block.m(span7, null);
+
+			if (!mounted) {
+				dispose = listen(button, "click", click_handler_7);
+				mounted = true;
+			}
+		},
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+			if (dirty[0] & /*historicalPaths*/ 1024 && t0_value !== (t0_value = /*pt*/ ctx[78].displayDate + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t2_value !== (t2_value = /*pt*/ ctx[78].displayTime + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t4_value !== (t4_value = /*pt*/ ctx[78].pressure + "")) set_data(t4, t4_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t8_value !== (t8_value = /*pt*/ ctx[78].bft.text + "")) set_data(t8, t8_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t11_value !== (t11_value = /*pt*/ ctx[78].speedDisplay + "")) set_data(t11, t11_value);
+
+			if (/*pt*/ ctx[78].bft.qualifier) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block_5(ctx);
+					if_block.c();
+					if_block.m(span7, null);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
+
+			if (dirty[0] & /*historicalPaths*/ 1024) {
+				set_style(span8, "background", /*pt*/ ctx[78].bft.color);
+			}
+
+			if (dirty[0] & /*historicalPaths*/ 1024) {
+				set_style(span8, "color", /*pt*/ ctx[78].bft.textColor);
+			}
+
+			if (dirty[0] & /*historicalPaths*/ 1024) {
+				set_style(span8, "text-shadow", /*pt*/ ctx[78].bft.textColor === '#ffffff'
+				? '0 1px 2px rgba(0,0,0,0.8)'
+				: 'none');
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(button);
+			}
+
+			if (if_block) if_block.d();
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (228:20) {#each historicalPaths as selectedPath (selectedPath.item.id)}
+function create_each_block_1(key_1, ctx) {
+	let div3;
+	let div2;
+	let div0;
+	let span0;
+
+	let t0_value = (/*selectedPath*/ ctx[75].source === 'live'
+	? '当前活跃路径'
+	: '已选停编路径') + "";
+
+	let t0;
+	let t1;
+	let strong;
+	let t2_value = (/*selectedPath*/ ctx[75].item.no || /*selectedPath*/ ctx[75].item.id) + "";
+	let t2;
+	let t3;
+	let t4_value = (/*selectedPath*/ ctx[75].item.nameCn || /*selectedPath*/ ctx[75].item.nameEn) + "";
+	let t4;
+	let t5;
+	let div1;
+	let label;
+	let input;
+	let input_checked_value;
+	let t6;
+	let span1;
+	let t7_value = (/*selectedPath*/ ctx[75].visible ? '已显示' : '已关闭') + "";
+	let t7;
+	let t8;
+	let t9;
+	let mounted;
+	let dispose;
+
+	function change_handler(...args) {
+		return /*change_handler*/ ctx[36](/*selectedPath*/ ctx[75], ...args);
+	}
+
+	let if_block0 = /*selectedPath*/ ctx[75].source === 'history' && create_if_block_6(ctx);
+	let if_block1 = /*selectedPath*/ ctx[75].source === 'history' && create_if_block_3(ctx);
+
+	return {
+		key: key_1,
+		first: null,
+		c() {
+			div3 = element("div");
+			div2 = element("div");
+			div0 = element("div");
+			span0 = element("span");
+			t0 = text(t0_value);
+			t1 = space();
+			strong = element("strong");
+			t2 = text(t2_value);
+			t3 = space();
+			t4 = text(t4_value);
+			t5 = space();
+			div1 = element("div");
+			label = element("label");
+			input = element("input");
+			t6 = space();
+			span1 = element("span");
+			t7 = text(t7_value);
+			t8 = space();
+			if (if_block0) if_block0.c();
+			t9 = space();
+			if (if_block1) if_block1.c();
+			attr(strong, "class", "svelte-9z60az");
+			attr(div0, "class", "history-query__selected-name svelte-9z60az");
+			attr(input, "type", "checkbox");
+			attr(input, "role", "switch");
+			input.checked = input_checked_value = /*selectedPath*/ ctx[75].visible;
+			attr(input, "class", "svelte-9z60az");
+			attr(label, "class", "history-query__switch svelte-9z60az");
+			attr(div1, "class", "history-query__selected-actions svelte-9z60az");
+			attr(div2, "class", "history-query__selected svelte-9z60az");
+			attr(div3, "class", "history-query__selected-path svelte-9z60az");
+			this.first = div3;
+		},
+		m(target, anchor) {
+			insert(target, div3, anchor);
+			append(div3, div2);
+			append(div2, div0);
+			append(div0, span0);
+			append(span0, t0);
+			append(div0, t1);
+			append(div0, strong);
+			append(strong, t2);
+			append(strong, t3);
+			append(strong, t4);
+			append(div2, t5);
+			append(div2, div1);
+			append(div1, label);
+			append(label, input);
+			append(label, t6);
+			append(label, span1);
+			append(span1, t7);
+			append(div1, t8);
+			if (if_block0) if_block0.m(div1, null);
+			append(div3, t9);
+			if (if_block1) if_block1.m(div3, null);
+
+			if (!mounted) {
+				dispose = listen(input, "change", change_handler);
+				mounted = true;
+			}
+		},
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+
+			if (dirty[0] & /*historicalPaths*/ 1024 && t0_value !== (t0_value = (/*selectedPath*/ ctx[75].source === 'live'
+			? '当前活跃路径'
+			: '已选停编路径') + "")) set_data(t0, t0_value);
+
+			if (dirty[0] & /*historicalPaths*/ 1024 && t2_value !== (t2_value = (/*selectedPath*/ ctx[75].item.no || /*selectedPath*/ ctx[75].item.id) + "")) set_data(t2, t2_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t4_value !== (t4_value = (/*selectedPath*/ ctx[75].item.nameCn || /*selectedPath*/ ctx[75].item.nameEn) + "")) set_data(t4, t4_value);
+
+			if (dirty[0] & /*historicalPaths*/ 1024 && input_checked_value !== (input_checked_value = /*selectedPath*/ ctx[75].visible)) {
+				input.checked = input_checked_value;
+			}
+
+			if (dirty[0] & /*historicalPaths*/ 1024 && t7_value !== (t7_value = (/*selectedPath*/ ctx[75].visible ? '已显示' : '已关闭') + "")) set_data(t7, t7_value);
+
+			if (/*selectedPath*/ ctx[75].source === 'history') {
+				if (if_block0) {
+					if_block0.p(ctx, dirty);
+				} else {
+					if_block0 = create_if_block_6(ctx);
+					if_block0.c();
+					if_block0.m(div1, null);
+				}
+			} else if (if_block0) {
+				if_block0.d(1);
+				if_block0 = null;
+			}
+
+			if (/*selectedPath*/ ctx[75].source === 'history') {
+				if (if_block1) {
+					if_block1.p(ctx, dirty);
+				} else {
+					if_block1 = create_if_block_3(ctx);
+					if_block1.c();
+					if_block1.m(div3, null);
+				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div3);
+			}
+
+			if (if_block0) if_block0.d();
+			if (if_block1) if_block1.d();
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
+// (338:20) {#if historyItems.length > 0}
+function create_if_block_1(ctx) {
+	let div0;
+	let t0;
+	let t1_value = /*historyItems*/ ctx[5].length + "";
+	let t1;
+	let t2;
+	let t3_value = /*historicalPaths*/ ctx[10].filter(func).length + "";
+	let t3;
+	let t4;
+	let t5;
+	let t6;
+	let div1;
+	let each_blocks = [];
+	let each_1_lookup = new Map_1();
+	let each_value = ensure_array_like(/*historyItems*/ ctx[5]);
+	const get_key = ctx => /*historyItem*/ ctx[72].id;
+
+	for (let i = 0; i < each_value.length; i += 1) {
+		let child_ctx = get_each_context(ctx, each_value, i);
+		let key = get_key(child_ctx);
+		each_1_lookup.set(key, each_blocks[i] = create_each_block(key, child_ctx));
+	}
+
+	return {
+		c() {
+			div0 = element("div");
+			t0 = text("已停编台风，按生成时间从新到旧，共 ");
+			t1 = text(t1_value);
+			t2 = text(" 个；当前显示\n                            ");
+			t3 = text(t3_value);
+			t4 = text("/");
+			t5 = text(MAX_HISTORICAL_PATHS);
+			t6 = space();
+			div1 = element("div");
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].c();
+			}
+
+			attr(div0, "class", "history-query__result-meta svelte-9z60az");
+			attr(div1, "class", "history-query__results svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, div0, anchor);
+			append(div0, t0);
+			append(div0, t1);
+			append(div0, t2);
+			append(div0, t3);
+			append(div0, t4);
+			append(div0, t5);
+			insert(target, t6, anchor);
+			insert(target, div1, anchor);
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				if (each_blocks[i]) {
+					each_blocks[i].m(div1, null);
+				}
+			}
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*historyItems*/ 32 && t1_value !== (t1_value = /*historyItems*/ ctx[5].length + "")) set_data(t1, t1_value);
+			if (dirty[0] & /*historicalPaths*/ 1024 && t3_value !== (t3_value = /*historicalPaths*/ ctx[10].filter(func).length + "")) set_data(t3, t3_value);
+
+			if (dirty[0] & /*historyListLoading, historyDetailLoadingId, canShowHistoricalPath, historyItems, isHistoricalPathSelected, showHistoricalTyphoon, getHistoricalResultAction*/ 51643040) {
+				each_value = ensure_array_like(/*historyItems*/ ctx[5]);
+				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, div1, destroy_block, create_each_block, null, get_each_context);
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(div0);
+				detach(t6);
+				detach(div1);
+			}
+
+			for (let i = 0; i < each_blocks.length; i += 1) {
+				each_blocks[i].d();
+			}
+		}
+	};
+}
+
+// (364:40) {#if historyItem.nameEn}
+function create_if_block_2(ctx) {
+	let span;
+	let t_value = /*historyItem*/ ctx[72].nameEn + "";
+	let t;
+
+	return {
+		c() {
+			span = element("span");
+			t = text(t_value);
+			attr(span, "class", "svelte-9z60az");
+		},
+		m(target, anchor) {
+			insert(target, span, anchor);
+			append(span, t);
+		},
+		p(ctx, dirty) {
+			if (dirty[0] & /*historyItems*/ 32 && t_value !== (t_value = /*historyItem*/ ctx[72].nameEn + "")) set_data(t, t_value);
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(span);
+			}
+		}
+	};
+}
+
+// (347:28) {#each historyItems as historyItem (historyItem.id)}
+function create_each_block(key_1, ctx) {
+	let button;
+	let span0;
+	let strong;
+	let t0_value = (/*historyItem*/ ctx[72].no || /*historyItem*/ ctx[72].id) + "";
+	let t0;
+	let t1;
+	let t2_value = (/*historyItem*/ ctx[72].nameCn || '未命名') + "";
+	let t2;
+	let t3;
+	let t4;
+	let span1;
+	let t5_value = /*getHistoricalResultAction*/ ctx[24](/*historyItem*/ ctx[72]) + "";
+	let t5;
+	let t6;
+	let button_disabled_value;
+	let mounted;
+	let dispose;
+	let if_block = /*historyItem*/ ctx[72].nameEn && create_if_block_2(ctx);
+
+	function click_handler_8() {
+		return /*click_handler_8*/ ctx[40](/*historyItem*/ ctx[72]);
+	}
+
+	return {
+		key: key_1,
+		first: null,
+		c() {
+			button = element("button");
+			span0 = element("span");
+			strong = element("strong");
+			t0 = text(t0_value);
+			t1 = space();
+			t2 = text(t2_value);
+			t3 = space();
+			if (if_block) if_block.c();
+			t4 = space();
+			span1 = element("span");
+			t5 = text(t5_value);
+			t6 = space();
+			attr(strong, "class", "svelte-9z60az");
+			attr(span0, "class", "history-query__result-name svelte-9z60az");
+			attr(span1, "class", "history-query__result-action svelte-9z60az");
+			attr(button, "type", "button");
+			attr(button, "class", "history-query__result svelte-9z60az");
+			button.disabled = button_disabled_value = /*historyListLoading*/ ctx[7] || /*historyDetailLoadingId*/ ctx[9] !== null || !/*canShowHistoricalPath*/ ctx[20](/*historyItem*/ ctx[72].id);
+			toggle_class(button, "history-query__result--selected", /*isHistoricalPathSelected*/ ctx[18](/*historyItem*/ ctx[72].id));
+			this.first = button;
+		},
+		m(target, anchor) {
+			insert(target, button, anchor);
+			append(button, span0);
+			append(span0, strong);
+			append(strong, t0);
+			append(strong, t1);
+			append(strong, t2);
+			append(span0, t3);
+			if (if_block) if_block.m(span0, null);
+			append(button, t4);
+			append(button, span1);
+			append(span1, t5);
+			append(button, t6);
+
+			if (!mounted) {
+				dispose = listen(button, "click", click_handler_8);
+				mounted = true;
+			}
+		},
+		p(new_ctx, dirty) {
+			ctx = new_ctx;
+			if (dirty[0] & /*historyItems*/ 32 && t0_value !== (t0_value = (/*historyItem*/ ctx[72].no || /*historyItem*/ ctx[72].id) + "")) set_data(t0, t0_value);
+			if (dirty[0] & /*historyItems*/ 32 && t2_value !== (t2_value = (/*historyItem*/ ctx[72].nameCn || '未命名') + "")) set_data(t2, t2_value);
+
+			if (/*historyItem*/ ctx[72].nameEn) {
+				if (if_block) {
+					if_block.p(ctx, dirty);
+				} else {
+					if_block = create_if_block_2(ctx);
+					if_block.c();
+					if_block.m(span0, null);
+				}
+			} else if (if_block) {
+				if_block.d(1);
+				if_block = null;
+			}
+
+			if (dirty[0] & /*historyItems*/ 32 && t5_value !== (t5_value = /*getHistoricalResultAction*/ ctx[24](/*historyItem*/ ctx[72]) + "")) set_data(t5, t5_value);
+
+			if (dirty[0] & /*historyListLoading, historyDetailLoadingId, historyItems*/ 672 && button_disabled_value !== (button_disabled_value = /*historyListLoading*/ ctx[7] || /*historyDetailLoadingId*/ ctx[9] !== null || !/*canShowHistoricalPath*/ ctx[20](/*historyItem*/ ctx[72].id))) {
+				button.disabled = button_disabled_value;
+			}
+
+			if (dirty[0] & /*isHistoricalPathSelected, historyItems*/ 262176) {
+				toggle_class(button, "history-query__result--selected", /*isHistoricalPathSelected*/ ctx[18](/*historyItem*/ ctx[72].id));
+			}
+		},
+		d(detaching) {
+			if (detaching) {
+				detach(button);
+			}
+
+			if (if_block) if_block.d();
+			mounted = false;
+			dispose();
+		}
+	};
+}
+
 function create_fragment(ctx) {
 	let div0;
 	let t1;
 	let section;
 	let div1;
 	let t3;
-	let div4;
+	let div5;
 	let div2;
-	let t12;
-	let div3;
-	let t13;
 	let t14;
-	let button;
+	let div3;
+	let t15;
+	let t16;
+	let button0;
 
-	let t15_value = (/*isLoading*/ ctx[2]
+	let t17_value = (/*isLoading*/ ctx[2]
 	? '⏳ 正在刷新中央气象台数据…'
 	: '📡 刷新中央气象台实时数据') + "";
 
-	let t15;
-	let t16;
+	let t17;
+	let t18;
+	let t19;
+	let div4;
+	let button1;
+	let span1;
+	let t21;
+	let span4;
+	let span2;
+	let t26;
+	let span3;
+	let t27_value = (/*historyPanelOpen*/ ctx[4] ? '▼' : '▶') + "";
+	let t27;
+	let t28;
 	let mounted;
 	let dispose;
-	let if_block = /*typhoonListInfo*/ ctx[1].length > 0 && create_if_block(ctx);
+	let if_block0 = /*typhoonListInfo*/ ctx[1].length > 0 && create_if_block_8(ctx);
+	let if_block1 = /*historyPanelOpen*/ ctx[4] && create_if_block(ctx);
 
 	return {
 		c() {
 			div0 = element("div");
-			div0.textContent = `${/*title*/ ctx[4]}`;
+			div0.textContent = `${/*title*/ ctx[11]}`;
 			t1 = space();
 			section = element("section");
 			div1 = element("div");
-			div1.textContent = `${/*title*/ ctx[4]}`;
+			div1.textContent = `${/*title*/ ctx[11]}`;
 			t3 = space();
-			div4 = element("div");
+			div5 = element("div");
 			div2 = element("div");
 
 			div2.innerHTML = `<strong style="color: #40a9ff; font-size: 14px;">🌀 中央气象台 (CMA) 实时与预报路径</strong> <p style="font-size: 12px; color: #d9d9d9; margin: 4px 0 0 0;">数据来源：CMA 官方接口 (typhoon.nmc.cn)<br/>
                 风力级数：GB/T 28591-2012（0–17级）<br/>
-                扩展显示：风速 &gt; 61.2 m/s 时标记为“18级（扩展）”<br/>
+                扩展显示：风速 &gt; <span translate="no">61.2 m/s</span> 时标记为“18级（扩展）”<br/>
                 气旋等级：GB/T 19201-2006（2分钟平均风）<br/>
                 轨迹说明：🌈 分色实线 (实况) | 🟡 金色虚线 (120h预测)<br/>
                 更新与停编：打开时及手动刷新；已停编仅显示历史实况</p>`;
 
-			t12 = space();
-			div3 = element("div");
-			t13 = text(/*statusText*/ ctx[0]);
 			t14 = space();
-			button = element("button");
-			t15 = text(t15_value);
+			div3 = element("div");
+			t15 = text(/*statusText*/ ctx[0]);
 			t16 = space();
-			if (if_block) if_block.c();
+			button0 = element("button");
+			t17 = text(t17_value);
+			t18 = space();
+			if (if_block0) if_block0.c();
+			t19 = space();
+			div4 = element("div");
+			button1 = element("button");
+			span1 = element("span");
+			span1.textContent = "📚 近一年台风";
+			t21 = space();
+			span4 = element("span");
+			span2 = element("span");
+			span2.textContent = `历史 ${/*getVisibleStoppedPathCount*/ ctx[19]()}/${MAX_HISTORICAL_PATHS}`;
+			t26 = space();
+			span3 = element("span");
+			t27 = text(t27_value);
+			t28 = space();
+			if (if_block1) if_block1.c();
 			attr(div0, "class", "plugin__mobile-header");
 			attr(div1, "class", "plugin__title plugin__title--chevron-back");
 			attr(div1, "role", "button");
@@ -1684,21 +2863,30 @@ function create_fragment(ctx) {
 			set_style(div3, "border-radius", "6px");
 			set_style(div3, "border", "1px solid #333");
 			set_style(div3, "text-shadow", "0 1px 2px rgba(0,0,0,0.8)");
-			button.disabled = /*isLoading*/ ctx[2];
-			set_style(button, "width", "100%");
-			set_style(button, "padding", "10px");
-			set_style(button, "background", "#1890ff");
-			set_style(button, "color", "#ffffff");
-			set_style(button, "border", "none");
-			set_style(button, "border-radius", "6px");
-			set_style(button, "font-weight", "bold");
-			set_style(button, "cursor", /*isLoading*/ ctx[2] ? 'wait' : 'pointer');
-			set_style(button, "opacity", /*isLoading*/ ctx[2] ? 0.72 : 1);
-			set_style(button, "text-shadow", "0 1px 2px rgba(0,0,0,0.5)");
-			set_style(div4, "padding", "12px");
-			set_style(div4, "font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif");
-			set_style(div4, "color", "#ffffff");
-			attr(section, "class", "plugin__content svelte-1ke6024");
+			button0.disabled = /*isLoading*/ ctx[2];
+			set_style(button0, "width", "100%");
+			set_style(button0, "padding", "10px");
+			set_style(button0, "background", "#1890ff");
+			set_style(button0, "color", "#ffffff");
+			set_style(button0, "border", "none");
+			set_style(button0, "border-radius", "6px");
+			set_style(button0, "font-weight", "bold");
+			set_style(button0, "cursor", /*isLoading*/ ctx[2] ? 'wait' : 'pointer');
+			set_style(button0, "opacity", /*isLoading*/ ctx[2] ? 0.72 : 1);
+			set_style(button0, "text-shadow", "0 1px 2px rgba(0,0,0,0.5)");
+			attr(span2, "class", "history-query__path-state svelte-9z60az");
+			toggle_class(span2, "history-query__path-state--visible", /*getVisibleStoppedPathCount*/ ctx[19]() > 0);
+			attr(span3, "class", "history-query__chevron svelte-9z60az");
+			attr(span3, "aria-hidden", "true");
+			attr(span4, "class", "history-query__toggle-meta svelte-9z60az");
+			attr(button1, "type", "button");
+			attr(button1, "class", "history-query__toggle svelte-9z60az");
+			attr(button1, "aria-expanded", /*historyPanelOpen*/ ctx[4]);
+			attr(div4, "class", "history-query svelte-9z60az");
+			set_style(div5, "padding", "12px");
+			set_style(div5, "font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif");
+			set_style(div5, "color", "#ffffff");
+			attr(section, "class", "plugin__content svelte-9z60az");
 		},
 		m(target, anchor) {
 			insert(target, div0, anchor);
@@ -1706,57 +2894,89 @@ function create_fragment(ctx) {
 			insert(target, section, anchor);
 			append(section, div1);
 			append(section, t3);
-			append(section, div4);
-			append(div4, div2);
-			append(div4, t12);
-			append(div4, div3);
-			append(div3, t13);
-			append(div4, t14);
-			append(div4, button);
-			append(button, t15);
-			append(div4, t16);
-			if (if_block) if_block.m(div4, null);
+			append(section, div5);
+			append(div5, div2);
+			append(div5, t14);
+			append(div5, div3);
+			append(div3, t15);
+			append(div5, t16);
+			append(div5, button0);
+			append(button0, t17);
+			append(div5, t18);
+			if (if_block0) if_block0.m(div5, null);
+			append(div5, t19);
+			append(div5, div4);
+			append(div4, button1);
+			append(button1, span1);
+			append(button1, t21);
+			append(button1, span4);
+			append(span4, span2);
+			append(span4, t26);
+			append(span4, span3);
+			append(span3, t27);
+			append(div4, t28);
+			if (if_block1) if_block1.m(div4, null);
 
 			if (!mounted) {
 				dispose = [
-					listen(div1, "click", /*returnToMenu*/ ctx[5]),
-					listen(div1, "keydown", /*keydown_handler*/ ctx[11]),
-					listen(button, "click", /*click_handler*/ ctx[12])
+					listen(div1, "click", /*returnToMenu*/ ctx[12]),
+					listen(div1, "keydown", /*keydown_handler*/ ctx[29]),
+					listen(button0, "click", /*click_handler*/ ctx[30]),
+					listen(button1, "click", /*click_handler_3*/ ctx[34])
 				];
 
 				mounted = true;
 			}
 		},
 		p(ctx, dirty) {
-			if (dirty[0] & /*statusText*/ 1) set_data(t13, /*statusText*/ ctx[0]);
+			if (dirty[0] & /*statusText*/ 1) set_data(t15, /*statusText*/ ctx[0]);
 
-			if (dirty[0] & /*isLoading*/ 4 && t15_value !== (t15_value = (/*isLoading*/ ctx[2]
+			if (dirty[0] & /*isLoading*/ 4 && t17_value !== (t17_value = (/*isLoading*/ ctx[2]
 			? '⏳ 正在刷新中央气象台数据…'
-			: '📡 刷新中央气象台实时数据') + "")) set_data(t15, t15_value);
+			: '📡 刷新中央气象台实时数据') + "")) set_data(t17, t17_value);
 
 			if (dirty[0] & /*isLoading*/ 4) {
-				button.disabled = /*isLoading*/ ctx[2];
+				button0.disabled = /*isLoading*/ ctx[2];
 			}
 
 			if (dirty[0] & /*isLoading*/ 4) {
-				set_style(button, "cursor", /*isLoading*/ ctx[2] ? 'wait' : 'pointer');
+				set_style(button0, "cursor", /*isLoading*/ ctx[2] ? 'wait' : 'pointer');
 			}
 
 			if (dirty[0] & /*isLoading*/ 4) {
-				set_style(button, "opacity", /*isLoading*/ ctx[2] ? 0.72 : 1);
+				set_style(button0, "opacity", /*isLoading*/ ctx[2] ? 0.72 : 1);
 			}
 
 			if (/*typhoonListInfo*/ ctx[1].length > 0) {
-				if (if_block) {
-					if_block.p(ctx, dirty);
+				if (if_block0) {
+					if_block0.p(ctx, dirty);
 				} else {
-					if_block = create_if_block(ctx);
-					if_block.c();
-					if_block.m(div4, null);
+					if_block0 = create_if_block_8(ctx);
+					if_block0.c();
+					if_block0.m(div5, t19);
 				}
-			} else if (if_block) {
-				if_block.d(1);
-				if_block = null;
+			} else if (if_block0) {
+				if_block0.d(1);
+				if_block0 = null;
+			}
+
+			if (dirty[0] & /*historyPanelOpen*/ 16 && t27_value !== (t27_value = (/*historyPanelOpen*/ ctx[4] ? '▼' : '▶') + "")) set_data(t27, t27_value);
+
+			if (dirty[0] & /*historyPanelOpen*/ 16) {
+				attr(button1, "aria-expanded", /*historyPanelOpen*/ ctx[4]);
+			}
+
+			if (/*historyPanelOpen*/ ctx[4]) {
+				if (if_block1) {
+					if_block1.p(ctx, dirty);
+				} else {
+					if_block1 = create_if_block(ctx);
+					if_block1.c();
+					if_block1.m(div4, null);
+				}
+			} else if (if_block1) {
+				if_block1.d(1);
+				if_block1 = null;
 			}
 		},
 		i: noop,
@@ -1768,7 +2988,8 @@ function create_fragment(ctx) {
 				detach(section);
 			}
 
-			if (if_block) if_block.d();
+			if (if_block0) if_block0.d();
+			if (if_block1) if_block1.d();
 			mounted = false;
 			run_all(dispose);
 		}
@@ -1776,8 +2997,8 @@ function create_fragment(ctx) {
 }
 
 const DETAIL_CONCURRENCY = 6;
-const RECENT_STOPPED_WITH_ACTIVE = 1;
-const RECENT_STOPPED_WITHOUT_ACTIVE = 3;
+const MAX_HISTORICAL_PATHS = 3;
+const MAX_RETAINED_HISTORICAL_PATHS = 6;
 
 function handleActivationKeydown(event, action) {
 	if (event.key === 'Enter' || event.key === ' ') {
@@ -1790,6 +3011,12 @@ function isAbortError(error) {
 	return error instanceof DOMException
 	? error.name === 'AbortError'
 	: Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'AbortError');
+}
+
+function getRecentHistoricalListYears(date) {
+	const beijingDate = new Date(date.getTime() + 8 * 3600 * 1000);
+	const currentYear = beijingDate.getUTCFullYear();
+	return [currentYear, currentYear - 1];
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -1830,11 +3057,14 @@ function mergeTyphoonLists(lists) {
 	return [...merged.values()];
 }
 
+const func = path => path.source === 'history' && path.visible;
+
 function instance($$self, $$props, $$invalidate) {
 	const { title } = config;
 	const REQUEST_TIMEOUT_MS = 20 * 1000;
 	const REFRESH_TIMEOUT_MS = 30 * 1000;
-	const STOPPED_CACHE_MS = 30 * 60 * 1000;
+	const HISTORY_DETAIL_TIMEOUT_MS = 60 * 1000;
+	const HISTORY_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 	let statusText = '点击上方按钮发起中央气象台实时联网请求...';
 	let typhoonListInfo = [];
 	let layerGroup = null;
@@ -1842,7 +3072,17 @@ function instance($$self, $$props, $$invalidate) {
 	let requestSequence = 0;
 	let isLoading = false;
 	let expandedTyphoonId = null;
-	const stoppedTyphoonCache = new Map();
+	let historyPanelOpen = false;
+	let historyItems = [];
+	let historyStatusText = '首次展开后将自动加载近一年台风。';
+	let historyListLoading = false;
+	let historyListLoaded = false;
+	let historyLoadFailed = false;
+	let historyDetailLoadingId = null;
+	let historyRequest = null;
+	let historyRequestSequence = 0;
+	let historicalPaths = [];
+	const historicalDetailCache = new Map();
 
 	const handleMapClick = () => {
 		map.closePopup();
@@ -1864,6 +3104,44 @@ function instance($$self, $$props, $$invalidate) {
 		return true;
 	}
 
+	function releaseHistoricalPathLayer(historicalPath) {
+		if (map.hasLayer(historicalPath.layerGroup)) {
+			map.removeLayer(historicalPath.layerGroup);
+		}
+
+		historicalPath.layerGroup.clearLayers();
+	}
+
+	function releaseHistoricalPathResources() {
+		for (const historicalPath of historicalPaths) {
+			releaseHistoricalPathLayer(historicalPath);
+		}
+
+		$$invalidate(10, historicalPaths = []);
+	}
+
+	function pruneRetainedHistoricalPaths(additionalCount = 0) {
+		const stoppedPaths = historicalPaths.filter(path => path.source === 'history');
+		const overflow = stoppedPaths.length + additionalCount - MAX_RETAINED_HISTORICAL_PATHS;
+
+		if (overflow <= 0) {
+			return 0;
+		}
+
+		const hiddenPaths = stoppedPaths.filter(path => !path.visible);
+		const preferred = hiddenPaths.filter(path => !path.windListOpen);
+		const fallback = hiddenPaths.filter(path => path.windListOpen);
+		const pathsToRemove = [...preferred, ...fallback].slice(0, overflow);
+		const removedPaths = new Set(pathsToRemove);
+
+		for (const historicalPath of pathsToRemove) {
+			releaseHistoricalPathLayer(historicalPath);
+		}
+
+		$$invalidate(10, historicalPaths = historicalPaths.filter(path => !removedPaths.has(path)));
+		return pathsToRemove.length;
+	}
+
 	function releaseMapResources() {
 		map.off('click', handleMapClick);
 		map.closePopup();
@@ -1873,6 +3151,8 @@ function instance($$self, $$props, $$invalidate) {
 			map.removeLayer(layerGroup);
 			layerGroup = null;
 		}
+
+		releaseHistoricalPathResources();
 	}
 
 	function cancelActiveRequest() {
@@ -1882,7 +3162,34 @@ function instance($$self, $$props, $$invalidate) {
 		$$invalidate(2, isLoading = false);
 	}
 
-	async function fetchText(url, signal) {
+	function cancelHistoryRequest() {
+		historyRequest?.abort();
+		historyRequest = null;
+		historyRequestSequence += 1;
+		$$invalidate(7, historyListLoading = false);
+		$$invalidate(9, historyDetailLoadingId = null);
+	}
+
+	function refreshHistoryAfterManualLiveUpdate(reason) {
+		if (reason !== 'manual') {
+			return;
+		}
+
+		if (historyRequest || historyListLoading) {
+			cancelHistoryRequest();
+		}
+
+		historyListLoaded = false;
+		$$invalidate(8, historyLoadFailed = false);
+
+		if (historyPanelOpen) {
+			void loadRecentHistoricalTyphoons();
+		} else if (historyItems.length > 0) {
+			$$invalidate(6, historyStatusText = '实时数据已刷新；下次展开时将重新核对近一年停编台风。');
+		}
+	}
+
+	async function fetchText(url, signal, cache = 'default') {
 		const requestController = new AbortController();
 		let timedOut = false;
 		const forwardAbort = () => requestController.abort();
@@ -1902,7 +3209,7 @@ function instance($$self, $$props, $$invalidate) {
 		);
 
 		try {
-			const response = await fetch(url, { signal: requestController.signal });
+			const response = await fetch(url, { signal: requestController.signal, cache });
 
 			if (!response.ok) {
 				throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
@@ -1929,9 +3236,16 @@ function instance($$self, $$props, $$invalidate) {
 
 	const onclose = () => {
 		cancelActiveRequest();
+		cancelHistoryRequest();
 		releaseMapResources();
 		$$invalidate(1, typhoonListInfo = []);
 		$$invalidate(3, expandedTyphoonId = null);
+		$$invalidate(4, historyPanelOpen = false);
+		$$invalidate(5, historyItems = []);
+		historyListLoaded = false;
+		$$invalidate(8, historyLoadFailed = false);
+		historicalDetailCache.clear();
+		$$invalidate(6, historyStatusText = '首次展开后将自动加载近一年台风。');
 		$$invalidate(0, statusText = '插件已关闭；重新打开后可刷新中央气象台实时数据。');
 	};
 
@@ -1980,7 +3294,512 @@ function instance($$self, $$props, $$invalidate) {
 		}
 	}
 
-	function renderTyphoonData(targetLayerGroup, tfId, tfNo, tfNameCn, tfNameEn, rawData, tfStatus = '进行中') {
+	function setLivePathVisibility(item, visible) {
+		if (!layerGroup || !item.pathLayerGroup) {
+			return;
+		}
+
+		if (visible) {
+			if (!layerGroup.hasLayer(item.pathLayerGroup)) {
+				layerGroup.addLayer(item.pathLayerGroup);
+			}
+		} else if (layerGroup.hasLayer(item.pathLayerGroup)) {
+			layerGroup.removeLayer(item.pathLayerGroup);
+			map.closePopup();
+		}
+
+		item.pathVisible = visible;
+		$$invalidate(1, typhoonListInfo = [...typhoonListInfo]);
+	}
+
+	function syncActiveHistoricalPaths(liveItems) {
+		const previousActiveById = new Map(historicalPaths.filter(path => path.source === 'live').map(path => [path.item.id, path]));
+		const liveIds = new Set(liveItems.map(item => String(item.id)));
+
+		for (const duplicatePath of historicalPaths.filter(path => path.source === 'history' && liveIds.has(path.item.id))) {
+			if (map.hasLayer(duplicatePath.layerGroup)) {
+				map.removeLayer(duplicatePath.layerGroup);
+			}
+
+			duplicatePath.layerGroup.clearLayers();
+		}
+
+		const activePaths = liveItems.map(item => {
+			const id = String(item.id);
+			const previousPath = previousActiveById.get(id);
+
+			return {
+				item: {
+					id,
+					no: String(item.no ?? ''),
+					nameEn: String(item.nameEn ?? ''),
+					nameCn: String(item.nameCn ?? ''),
+					sourceStatus: 'start'
+				},
+				layerGroup: item.pathLayerGroup,
+				rendered: item,
+				source: 'live',
+				visible: item.pathVisible !== false,
+				windListOpen: previousPath?.windListOpen ?? false
+			};
+		});
+
+		const stoppedPaths = historicalPaths.filter(path => path.source === 'history' && !liveIds.has(path.item.id));
+		$$invalidate(10, historicalPaths = [...activePaths, ...stoppedPaths]);
+	}
+
+	function clearTrackedLivePathLayers() {
+		for (const historicalPath of historicalPaths) {
+			if (historicalPath.source === 'live') {
+				historicalPath.layerGroup.clearLayers();
+			}
+		}
+	}
+
+	function focusLivePoint(item, pt) {
+		if (item.pathVisible === false) {
+			setHistoricalPathVisibility(String(item.id), true);
+
+			if (item.pathVisible === false) {
+				return;
+			}
+		}
+
+		focusPoint(pt);
+	}
+
+	function focusHistoricalPoint(pathId, pt) {
+		const historicalPath = historicalPaths.find(path => path.item.id === pathId);
+
+		if (!historicalPath) {
+			return;
+		}
+
+		if (!historicalPath.visible) {
+			setHistoricalPathVisibility(pathId, true);
+
+			if (!historicalPath.visible) {
+				return;
+			}
+		}
+
+		if (historicalPath.source === 'live') {
+			focusPoint(pt);
+			return;
+		}
+
+		map.closePopup();
+
+		if (pt.markerInstance) {
+			pt.markerInstance.openPopup();
+		}
+	}
+
+	function beginHistoryRequest() {
+		historyRequest?.abort();
+		$$invalidate(7, historyListLoading = false);
+		$$invalidate(9, historyDetailLoadingId = null);
+		const controller = new AbortController();
+		historyRequest = controller;
+		const requestId = ++historyRequestSequence;
+		return { controller, requestId };
+	}
+
+	async function toggleHistoryPanel() {
+		$$invalidate(4, historyPanelOpen = !historyPanelOpen);
+
+		if (historyPanelOpen && !historyListLoaded && !historyListLoading) {
+			await loadRecentHistoricalTyphoons();
+		}
+	}
+
+	async function loadRecentHistoricalTyphoons() {
+		const now = new Date();
+		const years = getRecentHistoricalListYears(now);
+		const { controller, requestId } = beginHistoryRequest();
+		$$invalidate(7, historyListLoading = true);
+		$$invalidate(8, historyLoadFailed = false);
+		$$invalidate(6, historyStatusText = '正在获取近一年涉及的台风列表…');
+		let detailTimedOut = false;
+		let detailTimeoutId = null;
+
+		try {
+			const failedYears = [];
+			let firstAnnualFailure = null;
+
+			const annualLists = await Promise.all(years.map(async year => {
+				const listUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/list_${year}?callback=cmaHistoryList`;
+
+				try {
+					const text = await fetchText(listUrl, controller.signal, 'no-store');
+
+					if (controller.signal.aborted || requestId !== historyRequestSequence) {
+						return [];
+					}
+
+					const data = parseJsonpPayload(text, `${year} 年台风列表`);
+					return Array.isArray(data?.typhoonList) ? data.typhoonList : [];
+				} catch(error) {
+					if (isAbortError(error)) {
+						throw error;
+					}
+
+					firstAnnualFailure ??= error;
+					failedYears.push(year);
+					console.warn(`获取 ${year} 年历史台风列表失败`, error);
+					return [];
+				}
+			}));
+
+			if (controller.signal.aborted || requestId !== historyRequestSequence) {
+				return;
+			}
+
+			if (failedYears.length === years.length) {
+				throw firstAnnualFailure instanceof Error
+				? firstAnnualFailure
+				: new Error(`全部历史年度列表请求失败（${years.join('、')}）`);
+			}
+
+			const candidates = normalizeHistoricalTyphoonList(annualLists.flat()).filter(item => item.sourceStatus === 'stop');
+
+			if (candidates.length === 0) {
+				$$invalidate(5, historyItems = []);
+				historyListLoaded = true;
+				$$invalidate(8, historyLoadFailed = failedYears.length > 0);
+
+				$$invalidate(6, historyStatusText = `⚠️ 已加载的年度列表没有可用停编记录${failedYears.length > 0
+				? `；${failedYears.join('、')} 年列表暂未加载成功，可重试`
+				: ''}。`);
+
+				return;
+			}
+
+			let processedCount = 0;
+			let failedCount = 0;
+			let cacheHitCount = 0;
+			$$invalidate(6, historyStatusText = `正在按生成时间核对 0/${candidates.length} 个台风…`);
+
+			detailTimeoutId = setTimeout(
+				() => {
+					detailTimedOut = true;
+					controller.abort();
+				},
+				HISTORY_DETAIL_TIMEOUT_MS
+			);
+
+			const detailedItems = await mapWithConcurrency(candidates, DETAIL_CONCURRENCY, async item => {
+				const cached = historicalDetailCache.get(item.id);
+
+				if (cached && now.getTime() - cached.cachedAt <= HISTORY_DETAIL_CACHE_TTL_MS) {
+					cacheHitCount += 1;
+					processedCount += 1;
+
+					if (!controller.signal.aborted && requestId === historyRequestSequence) {
+						$$invalidate(6, historyStatusText = `正在按生成时间核对 ${processedCount}/${candidates.length} 个台风…`);
+					}
+
+					return {
+						...item,
+						generationTime: cached.generationTime,
+						rawData: cached.rawData
+					};
+				}
+
+				if (cached) {
+					historicalDetailCache.delete(item.id);
+				}
+
+				try {
+					const viewUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/view_${encodeURIComponent(item.id)}?callback=cmaHistoryView`;
+					const viewText = await fetchText(viewUrl, controller.signal);
+
+					if (controller.signal.aborted || requestId !== historyRequestSequence) {
+						return null;
+					}
+
+					const viewData = parseJsonpPayload(viewText, `${item.no || item.id} 台风详情`);
+					const rawData = viewData?.typhoon;
+					const generationTime = getFirstObservationTime(rawData);
+
+					if (!rawData || !generationTime) {
+						failedCount += 1;
+						return null;
+					}
+
+					historicalDetailCache.set(item.id, {
+						generationTime,
+						rawData,
+						cachedAt: now.getTime()
+					});
+
+					return { ...item, generationTime, rawData };
+				} catch(error) {
+					if (isAbortError(error)) {
+						if (detailTimedOut) {
+							return null;
+						}
+
+						throw error;
+					}
+
+					failedCount += 1;
+					console.warn(`核对台风 ${item.no || item.id} 的生成时间失败`, error);
+					return null;
+				} finally {
+					processedCount += 1;
+
+					if (!controller.signal.aborted && requestId === historyRequestSequence) {
+						$$invalidate(6, historyStatusText = `正在按生成时间核对 ${processedCount}/${candidates.length} 个台风…`);
+					}
+				}
+			});
+
+			if (detailTimeoutId !== null) {
+				clearTimeout(detailTimeoutId);
+				detailTimeoutId = null;
+			}
+
+			if (requestId !== historyRequestSequence || controller.signal.aborted && !detailTimedOut) {
+				return;
+			}
+
+			const completedItems = detailedItems.filter(item => item !== null);
+			const recentItems = selectTyphoonsGeneratedWithinOneYear(completedItems, now);
+			const unresolvedCount = candidates.length - completedItems.length;
+			const warnings = [];
+
+			if (failedYears.length > 0) {
+				warnings.push(`${failedYears.join('、')} 年列表暂未加载成功`);
+			}
+
+			if (detailTimedOut) {
+				warnings.push(`详情核对达到 ${HISTORY_DETAIL_TIMEOUT_MS / 1000} 秒上限，${unresolvedCount} 个尚未完成`);
+			} else if (failedCount > 0) {
+				warnings.push(`${failedCount} 个详情未能核对`);
+			}
+
+			if (cacheHitCount > 0) {
+				warnings.push(`复用 ${cacheHitCount} 个会话缓存详情`);
+			}
+
+			$$invalidate(5, historyItems = recentItems);
+			historyListLoaded = true;
+			$$invalidate(8, historyLoadFailed = failedYears.length > 0 || detailTimedOut || failedCount > 0);
+			const warningSuffix = warnings.length > 0 ? `；${warnings.join('；')}` : '';
+
+			$$invalidate(6, historyStatusText = recentItems.length > 0
+			? `✅ 已找到按生成时间计算的近一年停编台风 ${recentItems.length} 个${warningSuffix}；可勾选显示路径。`
+			: `⚠️ 没有找到生成于近一年的可用停编台风记录${warningSuffix}。`);
+		} catch(error) {
+			if (isAbortError(error)) {
+				return;
+			}
+
+			console.warn('加载近一年台风失败', error);
+			const message = error instanceof Error ? error.message : String(error);
+			$$invalidate(8, historyLoadFailed = true);
+			$$invalidate(6, historyStatusText = `❌ 近一年台风加载失败：${message}。`);
+		} finally {
+			if (detailTimeoutId !== null) {
+				clearTimeout(detailTimeoutId);
+			}
+
+			if (historyRequest === controller) {
+				historyRequest = null;
+			}
+
+			if (requestId === historyRequestSequence) {
+				$$invalidate(7, historyListLoading = false);
+			}
+		}
+	}
+
+	function isHistoricalPathSelected(pathId) {
+		return historicalPaths.some(path => path.item.id === pathId);
+	}
+
+	function getVisibleStoppedPathCount() {
+		return historicalPaths.filter(path => path.source === 'history' && path.visible).length;
+	}
+
+	function canShowHistoricalPath(pathId) {
+		const historicalPath = historicalPaths.find(path => path.item.id === pathId);
+		return historicalPath?.visible === true || getVisibleStoppedPathCount() < MAX_HISTORICAL_PATHS;
+	}
+
+	function setHistoricalPathVisibility(pathId, visible) {
+		const historicalPath = historicalPaths.find(path => path.item.id === pathId);
+
+		if (!historicalPath) {
+			return;
+		}
+
+		if (visible && !historicalPath.visible && historicalPath.source === 'history' && getVisibleStoppedPathCount() >= MAX_HISTORICAL_PATHS) {
+			$$invalidate(6, historyStatusText = `最多同时显示 ${MAX_HISTORICAL_PATHS} 条停编历史路径；请先取消一条历史路径的对勾。`);
+			$$invalidate(10, historicalPaths = [...historicalPaths]);
+			return;
+		}
+
+		if (historicalPath.source === 'live') {
+			const liveItem = typhoonListInfo.find(item => String(item.id) === String(historicalPath.item.id));
+
+			if (!liveItem) {
+				return;
+			}
+
+			setLivePathVisibility(liveItem, visible);
+		} else {
+			if (visible) {
+				if (!map.hasLayer(historicalPath.layerGroup)) {
+					historicalPath.layerGroup.addTo(map);
+				}
+			} else if (map.hasLayer(historicalPath.layerGroup)) {
+				map.removeLayer(historicalPath.layerGroup);
+				map.closePopup();
+			}
+		}
+
+		historicalPath.visible = visible;
+		$$invalidate(10, historicalPaths = [...historicalPaths]);
+		const pathKind = historicalPath.source === 'live' ? '活跃路径' : '历史路径';
+
+		$$invalidate(6, historyStatusText = visible
+		? `✅ 已在地图显示 ${historicalPath.item.no || historicalPath.item.id} ${historicalPath.item.nameCn || historicalPath.item.nameEn} 的${pathKind}。`
+		: `已关闭 ${historicalPath.item.no || historicalPath.item.id} ${historicalPath.item.nameCn || historicalPath.item.nameEn} 的${pathKind}；路径仍保留在显示列表中。`);
+	}
+
+	function handleHistoricalPathToggle(pathId, event) {
+		setHistoricalPathVisibility(pathId, event.currentTarget.checked);
+	}
+
+	function removeHistoricalPath(pathId) {
+		const historicalPath = historicalPaths.find(path => path.item.id === pathId && path.source === 'history');
+
+		if (!historicalPath) {
+			return;
+		}
+
+		if (map.hasLayer(historicalPath.layerGroup)) {
+			map.closePopup();
+		}
+
+		releaseHistoricalPathLayer(historicalPath);
+		$$invalidate(10, historicalPaths = historicalPaths.filter(path => path !== historicalPath));
+		$$invalidate(6, historyStatusText = `已移除 ${historicalPath.item.no || historicalPath.item.id} ${historicalPath.item.nameCn || historicalPath.item.nameEn} 的历史路径；当前历史显示 ${getVisibleStoppedPathCount()}/${MAX_HISTORICAL_PATHS}。`);
+	}
+
+	function toggleHistoricalWindList(pathId) {
+		const historicalPath = historicalPaths.find(path => path.item.id === pathId);
+
+		if (!historicalPath) {
+			return;
+		}
+
+		historicalPath.windListOpen = !historicalPath.windListOpen;
+		$$invalidate(10, historicalPaths = [...historicalPaths]);
+	}
+
+	function getHistoricalResultAction(item) {
+		if (historyDetailLoadingId === item.id) {
+			return '加载中…';
+		}
+
+		const selectedPath = historicalPaths.find(path => path.item.id === item.id);
+
+		if (selectedPath) {
+			if (selectedPath.visible) {
+				return '查看列表';
+			}
+
+			return canShowHistoricalPath(item.id) ? '重新显示' : '已达上限';
+		}
+
+		return canShowHistoricalPath(item.id) ? '显示路径' : '已达上限';
+	}
+
+	function showHistoricalTyphoon(item) {
+		const selectedPath = historicalPaths.find(path => path.item.id === item.id);
+
+		if (selectedPath) {
+			$$invalidate(10, historicalPaths = historicalPaths.map(path => ({
+				...path,
+				windListOpen: path.item.id === item.id
+			})));
+
+			setHistoricalPathVisibility(item.id, true);
+			return;
+		}
+
+		if (getVisibleStoppedPathCount() >= MAX_HISTORICAL_PATHS) {
+			$$invalidate(6, historyStatusText = `最多同时显示 ${MAX_HISTORICAL_PATHS} 条停编历史路径；请先取消一条历史路径的对勾。`);
+			return;
+		}
+
+		if (!ensureLayerGroup()) {
+			$$invalidate(6, historyStatusText = '❌ 地图运行环境尚未就绪。');
+			return;
+		}
+
+		$$invalidate(9, historyDetailLoadingId = item.id);
+		$$invalidate(6, historyStatusText = `正在绘制 ${item.no || item.id} ${item.nameCn || item.nameEn} 的历史路径…`);
+		let candidateLayerGroup = null;
+
+		try {
+			candidateLayerGroup = window.L.layerGroup();
+			const rendered = renderTyphoonData(candidateLayerGroup, item.id, item.no, item.nameCn, item.nameEn, item.rawData, '已停编', 'history');
+
+			if (!rendered) {
+				throw new Error('详情中没有有效的可绘制实况点');
+			}
+
+			candidateLayerGroup.addTo(map);
+			const prunedCount = pruneRetainedHistoricalPaths(1);
+
+			$$invalidate(10, historicalPaths = [
+				...historicalPaths.map(path => ({ ...path, windListOpen: false })),
+				{
+					item,
+					layerGroup: candidateLayerGroup,
+					rendered,
+					source: 'history',
+					visible: true,
+					windListOpen: true
+				}
+			]);
+
+			candidateLayerGroup = null;
+
+			$$invalidate(6, historyStatusText = `✅ 已添加 ${item.no || item.id} ${item.nameCn || item.nameEn} 的历史实况路径；当前历史显示 ${getVisibleStoppedPathCount()}/${MAX_HISTORICAL_PATHS}${prunedCount > 0
+			? `；为控制性能已自动清理 ${prunedCount} 条最早关闭的历史记录`
+			: ''}。`);
+		} catch(error) {
+			if (candidateLayerGroup) {
+				if (map.hasLayer(candidateLayerGroup)) {
+					map.removeLayer(candidateLayerGroup);
+				}
+
+				candidateLayerGroup.clearLayers();
+			}
+
+			console.warn(`加载历史台风 ${item.no || item.id} 失败`, error);
+			const message = error instanceof Error ? error.message : String(error);
+			$$invalidate(6, historyStatusText = `❌ ${item.no || item.id} 历史路径加载失败：${message}；当前地图路径未改变。`);
+		} finally {
+			$$invalidate(9, historyDetailLoadingId = null);
+		}
+	}
+
+	function renderTyphoonData(
+		targetLayerGroup,
+	tfId,
+	tfNo,
+	tfNameCn,
+	tfNameEn,
+	rawData,
+	tfStatus = '进行中',
+	renderMode = 'live'
+	) {
 		if (!window.L || !targetLayerGroup) {
 			return null;
 		}
@@ -1991,6 +3810,7 @@ function instance($$self, $$props, $$invalidate) {
 		const safeNo = escapeHtml(tfNo);
 		const safeNameCn = escapeHtml(tfNameCn);
 		const safeNameEn = escapeHtml(tfNameEn);
+		const pointKind = renderMode === 'history' ? '历史实况点' : '实况点';
 
 		for (const point of points) {
 			if (!Array.isArray(point) || !isValidLatLng(point[5], point[4])) {
@@ -2017,31 +3837,37 @@ function instance($$self, $$props, $$invalidate) {
 			const { date: displayDate, time: displayTime } = splitDisplayTime(formattedT);
 			const safeFormattedTime = escapeHtml(formattedT);
 			const safePressure = escapeHtml(pressure);
-			const safeSpeedDisplay = escapeHtml(speedMs === null ? '—' : `${speedMs} m/s`);
+			const safeSpeedDisplay = escapeHtml(speedMs === null ? '—' : `${speedMs}m/s`);
 			const safeLat = escapeHtml(lat);
 			const safeLng = escapeHtml(lng);
 			realSegments.push({ latlng: [lat, lng], color: bft.color });
 
 			const popupHtml = `
                 <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
-                    <strong style="font-size:15px; color:#1890ff;">🌀 ${safeNo} ${safeNameCn} (${safeNameEn}) [实况点]</strong><br/>
+                    <strong style="font-size:15px; color:#1890ff;">🌀 ${safeNo} ${safeNameCn} (${safeNameEn}) [${pointKind}]</strong><br/>
                     <b>📍 时间</b>：${safeFormattedTime}<br/>
-                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(bft.text)} (${safeSpeedDisplay})</span><br/>
-                    <b>📉 中心气压</b>：${safePressure} hPa<br/>
+                    <b>🌬️ 风力等级</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(bft.text)} <span translate="no">(${safeSpeedDisplay})</span></span><br/>
+                    <b>📉 中心气压</b>：<span translate="no">${safePressure} hPa</span><br/>
                     <b>🧭 坐标</b>：${safeLat}°N, ${safeLng}°E
                 </div>
             `;
 
-			const popupOptions = { closeOnClick: true, autoClose: true };
+			const popupOptions = {
+				closeOnClick: true,
+				autoClose: true,
+				autoPan: renderMode !== 'history'
+			};
 
-			const hitArea = window.L.circleMarker([lat, lng], {
-				radius: 18,
-				stroke: false,
-				fill: true,
-				fillColor: '#ffffff',
-				fillOpacity: 0.001,
-				interactive: true
-			}).addTo(targetLayerGroup);
+			const hitArea = renderMode === 'live'
+			? window.L.circleMarker([lat, lng], {
+					radius: 18,
+					stroke: false,
+					fill: true,
+					fillColor: '#ffffff',
+					fillOpacity: 0.001,
+					interactive: true
+				}).addTo(targetLayerGroup)
+			: null;
 
 			const marker = window.L.circleMarker([lat, lng], {
 				radius: 4,
@@ -2052,7 +3878,7 @@ function instance($$self, $$props, $$invalidate) {
 				interactive: true
 			}).addTo(targetLayerGroup);
 
-			hitArea.bindPopup(popupHtml, popupOptions);
+			hitArea?.bindPopup(popupHtml, popupOptions);
 			marker.bindPopup(popupHtml, popupOptions);
 
 			realPointsList.push({
@@ -2067,7 +3893,7 @@ function instance($$self, $$props, $$invalidate) {
 				speedDisplay,
 				bft,
 				isForecast: false,
-				markerInstance: hitArea
+				markerInstance: hitArea ?? marker
 			});
 		}
 
@@ -2118,15 +3944,15 @@ function instance($$self, $$props, $$invalidate) {
 					const targetFormattedTime = formatForecastTime(baseTimeStr, fcHours);
 					const safeForecastTime = escapeHtml(targetFormattedTime);
 					const safePressure = escapeHtml(pressure);
-					const safeSpeedDisplay = escapeHtml(speedMs === null ? '—' : `${speedMs} m/s`);
+					const safeSpeedDisplay = escapeHtml(speedMs === null ? '—' : `${speedMs}m/s`);
 					forecastLatlngs.push([lat, lng]);
 
 					const fcPopupHtml = `
                         <div style="font-size:13px; line-height:1.6; color:#000; font-family:sans-serif; padding:2px;">
                             <strong style="font-size:15px; color:#faad14;">🔮 ${safeNo} ${safeNameCn} [中央气象台 +${fcHours}h 未来预测]</strong><br/>
                             <b>📍 预测目标时间</b>：${safeForecastTime}<br/>
-                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(bft.text)} (${safeSpeedDisplay})</span><br/>
-                            <b>📉 预测中心气压</b>：${safePressure} hPa<br/>
+                            <b>🌬️ 预测风力</b>：<span style="background:${bft.color}; color:${bft.textColor}; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(bft.text)} <span translate="no">(${safeSpeedDisplay})</span></span><br/>
+                            <b>📉 预测中心气压</b>：<span translate="no">${safePressure} hPa</span><br/>
                             <b>🧭 坐标</b>：${escapeHtml(lat)}°N, ${escapeHtml(lng)}°E
                         </div>
                     `;
@@ -2190,7 +4016,7 @@ function instance($$self, $$props, $$invalidate) {
 			const listUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/list_${year}?callback=cmaLiveList`;
 
 			try {
-				const text = await fetchText(listUrl, controller.signal);
+				const text = await fetchText(listUrl, controller.signal, 'no-store');
 
 				if (controller.signal.aborted || requestId !== requestSequence) {
 					return [];
@@ -2227,17 +4053,8 @@ function instance($$self, $$props, $$invalidate) {
 		const no = String(item[4] ?? '');
 		const nameEn = String(item[1] ?? '');
 		const nameCn = String(item[2] ?? '');
-
-		if (status === '已停编') {
-			const cached = stoppedTyphoonCache.get(id);
-
-			if (cached && Date.now() - cached.cachedAt < STOPPED_CACHE_MS) {
-				return cached.value;
-			}
-		}
-
 		const viewUrl = `https://typhoon.nmc.cn/weatherservice/typhoon/jsons/view_${encodeURIComponent(id)}?callback=cmaLiveView`;
-		const viewText = await fetchText(viewUrl, controller.signal);
+		const viewText = await fetchText(viewUrl, controller.signal, 'no-store');
 
 		if (controller.signal.aborted || requestId !== requestSequence) {
 			return null;
@@ -2259,10 +4076,6 @@ function instance($$self, $$props, $$invalidate) {
 			latestObservationTime: getLatestObservationTime(viewData.typhoon)
 		};
 
-		if (status === '已停编') {
-			stoppedTyphoonCache.set(id, { value, cachedAt: Date.now() });
-		}
-
 		return value;
 	}
 
@@ -2274,6 +4087,7 @@ function instance($$self, $$props, $$invalidate) {
 
 		const previousExpandedId = expandedTyphoonId;
 		const hadPreviousDisplay = typhoonListInfo.length > 0;
+		const previousTyphoonById = new Map(typhoonListInfo.map(item => [String(item.id), item]));
 		activeRequest?.abort();
 		const controller = new AbortController();
 		let refreshTimedOut = false;
@@ -2294,7 +4108,9 @@ function instance($$self, $$props, $$invalidate) {
 		? '🌐 正在手动刷新中央气象台实时与预报数据；完成前保留当前地图和选择...'
 		: '🌐 正在加载中央气象台实时与预报数据...');
 
-		let failedCount = 0;
+		let detailFailureCount = 0;
+		let renderFailureCount = 0;
+		let staleFallbackCount = 0;
 		let pendingLayerGroup = null;
 
 		try {
@@ -2317,20 +4133,56 @@ function instance($$self, $$props, $$invalidate) {
 			const stoppedItems = typhoonItems.filter(item => item[7] === 'stop');
 			const ignoredStatusCount = typhoonItems.length - activeItems.length - stoppedItems.length;
 
-			const recentStoppedLimit = activeItems.length > 0
-			? RECENT_STOPPED_WITH_ACTIVE
-			: RECENT_STOPPED_WITHOUT_ACTIVE;
+			if (activeItems.length === 0) {
+				if (failedYears.length > 0 && hadPreviousDisplay) {
+					$$invalidate(0, statusText = `⚠️ 已加载的年度列表暂未发现活跃台风，但 ${failedYears.join('、')} 年列表请求失败；为避免误删，已保留上次成功显示。`);
+					return;
+				}
 
-			$$invalidate(0, statusText = activeItems.length > 0
-			? `✅ 台风列表获取成功，正在加载 ${activeItems.length} 个活跃台风，并核对 ${stoppedItems.length} 个停编记录的最后实况时间...`
-			: `⚠️ 当前无活跃台风，正在核对 ${stoppedItems.length} 个停编记录并查找最近 ${recentStoppedLimit} 个...`);
+				pendingLayerGroup = window.L.layerGroup();
+				const previousLayerGroup = layerGroup;
+				pendingLayerGroup.addTo(map);
+
+				try {
+					if (previousLayerGroup) {
+						map.removeLayer(previousLayerGroup);
+					}
+				} catch(error) {
+					map.removeLayer(pendingLayerGroup);
+					pendingLayerGroup.clearLayers();
+					pendingLayerGroup = null;
+					throw error;
+				}
+
+				clearTrackedLivePathLayers();
+				previousLayerGroup?.clearLayers();
+				layerGroup = pendingLayerGroup;
+				pendingLayerGroup = null;
+				$$invalidate(1, typhoonListInfo = []);
+				$$invalidate(3, expandedTyphoonId = null);
+				syncActiveHistoricalPaths([]);
+
+				const listFailureSuffix = failedYears.length > 0
+				? `；${failedYears.join('、')} 年列表暂未加载成功`
+				: '';
+
+				const ignoredStatusSuffix = ignoredStatusCount > 0
+				? `；忽略 ${ignoredStatusCount} 条未知状态记录`
+				: '';
+
+				$$invalidate(0, statusText = `⚠️ 当前无活跃台风；已停编台风可在下方“近一年台风”中查看${listFailureSuffix}${ignoredStatusSuffix}；最后刷新（北京时间）${formatBeijingRefreshTime(new Date())}。`);
+				refreshHistoryAfterManualLiveUpdate(reason);
+				return;
+			}
+
+			$$invalidate(0, statusText = `✅ 台风列表获取成功，正在加载 ${activeItems.length} 个活跃台风；${stoppedItems.length} 个停编记录请在下方“近一年台风”中查看...`);
 
 			const loadSafely = async (item, itemStatus) => {
 				try {
 					const loaded = await loadTyphoonDetail(item, itemStatus, controller, requestId);
 
 					if (!loaded) {
-						failedCount += 1;
+						detailFailureCount += 1;
 					}
 
 					return loaded;
@@ -2339,25 +4191,49 @@ function instance($$self, $$props, $$invalidate) {
 						throw error;
 					}
 
-					failedCount += 1;
+					detailFailureCount += 1;
 					console.warn(`获取台风 ${String(item[4] ?? '')} 详情失败`, error);
 					return null;
 				}
 			};
 
-			const [activeResults, stoppedResults] = await Promise.all([
-				Promise.all(activeItems.map(item => loadSafely(item, '进行中'))),
-				mapWithConcurrency(stoppedItems, DETAIL_CONCURRENCY, item => loadSafely(item, '已停编'))
-			]);
+			const activeResults = await Promise.all(activeItems.map(item => loadSafely(item, '进行中')));
 
 			if (controller.signal.aborted || requestId !== requestSequence) {
 				return;
 			}
 
-			const loadedActive = activeResults.filter(item => item !== null);
-			const loadedStopped = stoppedResults.filter(item => item !== null);
-			const recentStopped = selectRecentStopped(loadedStopped, recentStoppedLimit);
-			const targetData = [...loadedActive, ...recentStopped];
+			const targetData = [];
+
+			for (let index = 0; index < activeItems.length; index += 1) {
+				const loaded = activeResults[index];
+
+				if (loaded) {
+					targetData.push(loaded);
+					continue;
+				}
+
+				const listItem = activeItems[index];
+				const id = String(listItem[0]);
+				const previous = previousTyphoonById.get(id);
+
+				if (!previous?.rawData) {
+					continue;
+				}
+
+				staleFallbackCount += 1;
+
+				targetData.push({
+					id,
+					no: String(listItem[4] ?? previous.no ?? ''),
+					nameEn: String(listItem[1] ?? previous.nameEn ?? ''),
+					nameCn: String(listItem[2] ?? previous.nameCn ?? ''),
+					rawData: previous.rawData,
+					status: '进行中',
+					latestObservationTime: String(previous.latestObservationTime ?? ''),
+					usingPreviousData: true
+				});
+			}
 
 			if (targetData.length === 0) {
 				$$invalidate(0, statusText = hadPreviousDisplay
@@ -2377,15 +4253,27 @@ function instance($$self, $$props, $$invalidate) {
 					const rendered = renderTyphoonData(stormLayerGroup, item.id, item.no, item.nameCn, item.nameEn, item.rawData, item.status);
 
 					if (rendered) {
-						stormLayerGroup.addTo(pendingLayerGroup);
-						nextTyphoonListInfo.push(rendered);
+						const previous = previousTyphoonById.get(String(item.id));
+						const pathVisible = previous ? previous.pathVisible !== false : true;
+
+						if (pathVisible) {
+							stormLayerGroup.addTo(pendingLayerGroup);
+						}
+
+						nextTyphoonListInfo.push({
+							...rendered,
+							rawData: item.rawData,
+							usingPreviousData: item.usingPreviousData === true,
+							pathLayerGroup: stormLayerGroup,
+							pathVisible
+						});
 					} else {
 						stormLayerGroup.clearLayers();
-						failedCount += 1;
+						renderFailureCount += 1;
 					}
 				} catch(error) {
 					stormLayerGroup.clearLayers();
-					failedCount += 1;
+					renderFailureCount += 1;
 					console.warn(`绘制台风 ${item.no} 失败`, error);
 				}
 			}
@@ -2415,14 +4303,34 @@ function instance($$self, $$props, $$invalidate) {
 				throw error;
 			}
 
+			clearTrackedLivePathLayers();
 			previousLayerGroup?.clearLayers();
 			layerGroup = pendingLayerGroup;
 			pendingLayerGroup = null;
 			$$invalidate(1, typhoonListInfo = nextTyphoonListInfo);
+			syncActiveHistoricalPaths(typhoonListInfo);
 			restoreSelectionAfterRefresh(previousExpandedId, hadPreviousDisplay);
+			refreshHistoryAfterManualLiveUpdate(reason);
 			const renderedActiveCount = typhoonListInfo.filter(item => item.status === '进行中').length;
-			const renderedStoppedCount = typhoonListInfo.filter(item => item.status === '已停编').length;
-			const failureSuffix = failedCount > 0 ? `；${failedCount} 个详情未能加载` : '';
+			const unavailableDetailCount = Math.max(0, detailFailureCount - staleFallbackCount);
+
+			const staleFallbackSuffix = staleFallbackCount > 0
+			? `；${staleFallbackCount} 个活跃台风暂用上次成功数据`
+			: '';
+
+			const failureParts = [];
+
+			if (unavailableDetailCount > 0) {
+				failureParts.push(`${unavailableDetailCount} 个详情未能加载且没有旧数据`);
+			}
+
+			if (renderFailureCount > 0) {
+				failureParts.push(`${renderFailureCount} 个台风未能绘制`);
+			}
+
+			const failureSuffix = failureParts.length > 0
+			? `；${failureParts.join('；')}`
+			: '';
 
 			const listFailureSuffix = failedYears.length > 0
 			? `；${failedYears.join('、')} 年列表暂未加载成功`
@@ -2434,20 +4342,11 @@ function instance($$self, $$props, $$invalidate) {
 
 			const refreshSuffix = `；最后刷新（北京时间）${formatBeijingRefreshTime(new Date())}`;
 
-			if (renderedActiveCount > 0) {
-				const stoppedSuffix = renderedStoppedCount > 0
-				? `，并保留最近 ${renderedStoppedCount} 个停编台风的历史实况`
-				: '';
+			const stoppedSuffix = stoppedItems.length > 0
+			? `；${stoppedItems.length} 个停编台风可在下方“近一年台风”中查看`
+			: '';
 
-				$$invalidate(0, statusText = `✅ 已绘制 ${renderedActiveCount} 个活跃台风的实况轨迹与可用预报${stoppedSuffix}${failureSuffix}${listFailureSuffix}${ignoredStatusSuffix}${refreshSuffix}。`);
-			} else if (renderedStoppedCount > 0) {
-				const activeFailurePrefix = activeItems.length > 0 ? '活跃台风详情暂未加载成功；' : '当前无活跃台风；';
-				$$invalidate(0, statusText = `⚠️ ${activeFailurePrefix}已显示最近 ${renderedStoppedCount} 个停编台风的历史实况（不显示预报）${failureSuffix}${listFailureSuffix}${ignoredStatusSuffix}${refreshSuffix}。`);
-			} else {
-				$$invalidate(0, statusText = hadPreviousDisplay
-				? '❌ 台风详情不包含可绘制的实况点；已保留上次成功显示。'
-				: '❌ 台风详情不包含可绘制的实况点。');
-			}
+			$$invalidate(0, statusText = `✅ 已绘制 ${renderedActiveCount} 个活跃台风的实况轨迹与可用预报${stoppedSuffix}${staleFallbackSuffix}${failureSuffix}${listFailureSuffix}${ignoredStatusSuffix}${refreshSuffix}。`);
 		} catch(error) {
 			if (pendingLayerGroup) {
 				if (map.hasLayer(pendingLayerGroup)) {
@@ -2505,18 +4404,43 @@ function instance($$self, $$props, $$invalidate) {
 	const keydown_handler = event => handleActivationKeydown(event, returnToMenu);
 	const click_handler = () => void fetchCMATyphoonLive('manual');
 	const click_handler_1 = item => toggleTyphoonPanel(item.id);
-	const click_handler_2 = pt => focusPoint(pt);
-	const keydown_handler_1 = (pt, event) => handleActivationKeydown(event, () => focusPoint(pt));
+	const click_handler_2 = (item, pt) => focusLivePoint(item, pt);
+	const keydown_handler_1 = (item, pt, event) => handleActivationKeydown(event, () => focusLivePoint(item, pt));
+	const click_handler_3 = () => void toggleHistoryPanel();
+	const click_handler_4 = () => void loadRecentHistoricalTyphoons();
+	const change_handler = (selectedPath, event) => handleHistoricalPathToggle(selectedPath.item.id, event);
+	const click_handler_5 = selectedPath => removeHistoricalPath(selectedPath.item.id);
+	const click_handler_6 = selectedPath => toggleHistoricalWindList(selectedPath.item.id);
+	const click_handler_7 = (selectedPath, pt) => focusHistoricalPoint(selectedPath.item.id, pt);
+	const click_handler_8 = historyItem => void showHistoricalTyphoon(historyItem);
 
 	return [
 		statusText,
 		typhoonListInfo,
 		isLoading,
 		expandedTyphoonId,
+		historyPanelOpen,
+		historyItems,
+		historyStatusText,
+		historyListLoading,
+		historyLoadFailed,
+		historyDetailLoadingId,
+		historicalPaths,
 		title,
 		returnToMenu,
 		toggleTyphoonPanel,
-		focusPoint,
+		focusLivePoint,
+		focusHistoricalPoint,
+		toggleHistoryPanel,
+		loadRecentHistoricalTyphoons,
+		isHistoricalPathSelected,
+		getVisibleStoppedPathCount,
+		canShowHistoricalPath,
+		handleHistoricalPathToggle,
+		removeHistoricalPath,
+		toggleHistoricalWindList,
+		getHistoricalResultAction,
+		showHistoricalTyphoon,
 		fetchCMATyphoonLive,
 		onopen,
 		onclose,
@@ -2524,22 +4448,29 @@ function instance($$self, $$props, $$invalidate) {
 		click_handler,
 		click_handler_1,
 		click_handler_2,
-		keydown_handler_1
+		keydown_handler_1,
+		click_handler_3,
+		click_handler_4,
+		change_handler,
+		click_handler_5,
+		click_handler_6,
+		click_handler_7,
+		click_handler_8
 	];
 }
 
 class Plugin extends SvelteComponent {
 	constructor(options) {
 		super();
-		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 9, onclose: 10 }, add_css, [-1, -1]);
+		init(this, options, instance, create_fragment, safe_not_equal, { onopen: 27, onclose: 28 }, add_css, [-1, -1, -1]);
 	}
 
 	get onopen() {
-		return this.$$.ctx[9];
+		return this.$$.ctx[27];
 	}
 
 	get onclose() {
-		return this.$$.ctx[10];
+		return this.$$.ctx[28];
 	}
 }
 
