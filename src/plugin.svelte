@@ -194,9 +194,13 @@
                 <span>📚 近一年台风</span>
                 <span class="history-query__toggle-meta">
                     <span
-                        class:history-query__path-state--visible={visibleStoppedPathCount > 0}
+                        class:history-query__path-state--visible={historicalPaths.filter(
+                            path => path.source === 'history' && path.visible,
+                        ).length > 0}
                         class="history-query__path-state"
-                        >历史 {visibleStoppedPathCount}/{MAX_HISTORICAL_PATHS}</span
+                        >历史 {historicalPaths.filter(
+                            path => path.source === 'history' && path.visible,
+                        ).length}/{MAX_HISTORICAL_PATHS}</span
                     >
                     <span class="history-query__chevron" aria-hidden="true"
                         >{historyPanelOpen ? '▼' : '▶'}</span
@@ -338,7 +342,9 @@
                     {#if historyItems.length > 0}
                         <div class="history-query__result-meta">
                             已停编台风，按生成时间从新到旧，共 {historyItems.length} 个；当前显示
-                            {visibleStoppedPathCount}/{MAX_HISTORICAL_PATHS}
+                            {historicalPaths.filter(
+                                path => path.source === 'history' && path.visible,
+                            ).length}/{MAX_HISTORICAL_PATHS}
                         </div>
 
                         <div class="history-query__results">
@@ -463,14 +469,7 @@
     let historyRequest: AbortController | null = null;
     let historyRequestSequence = 0;
     let historicalPaths: HistoricalPathState[] = [];
-    let visibleStoppedPathCount = 0;
     const historicalDetailCache = new Map<string, HistoricalDetailCacheEntry>();
-
-    // Keep the quota label reactive; function calls in the outer markup are not
-    // invalidated reliably when a selected path is added or removed.
-    $: visibleStoppedPathCount = historicalPaths.filter(
-        path => path.source === 'history' && path.visible,
-    ).length;
 
     const handleMapClick = () => {
         map.closePopup();
