@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.1 seconds
+Output:
 {
   "name": "windy-plugin-cma-typhoon",
   "version": "1.0.3",
@@ -9,7 +12,7 @@
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1786423807632,
-  "builtReadable": "2026-08-11T04:50:07.632Z",
+  "built": 1786495609676,
+  "builtReadable": "2026-08-12T00:46:49.676Z",
   "screenshot": "screenshot.jpg"
 }
