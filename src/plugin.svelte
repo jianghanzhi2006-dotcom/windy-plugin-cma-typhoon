@@ -211,7 +211,7 @@
             {#if historyPanelOpen}
                 <div class="history-query__body">
                     <p class="history-query__hint">
-                        活跃台风可在此关闭或恢复路径且不占额度；最多同时显示 3 条停编历史路径，最多保留 6 条已选历史记录，超出时自动清理最早关闭的记录。
+                        活跃台风可在此关闭或恢复路径且不占额度；最多同时显示 5 条停编历史路径，最多保留 6 条已选历史记录，超出时自动清理最早关闭的记录。
                     </p>
 
                     <div class="history-query__status-row">
@@ -353,12 +353,16 @@
                                     type="button"
                                     class:history-query__result--selected={isHistoricalPathSelected(
                                         historyItem.id,
+                                        historicalPaths,
                                     )}
                                     class="history-query__result"
                                     on:click={() => void showHistoricalTyphoon(historyItem)}
                                     disabled={historyListLoading ||
                                         historyDetailLoadingId !== null ||
-                                        !canShowHistoricalPath(historyItem.id)}
+                                        !canShowHistoricalPath(
+                                            historyItem.id,
+                                            historicalPaths,
+                                        )}
                                 >
                                     <span class="history-query__result-name">
                                         <strong
@@ -370,7 +374,11 @@
                                         {/if}
                                     </span>
                                     <span class="history-query__result-action">
-                                        {getHistoricalResultAction(historyItem)}
+                                        {getHistoricalResultAction(
+                                            historyItem,
+                                            historicalPaths,
+                                            historyDetailLoadingId,
+                                        )}
                                     </span>
                                 </button>
                             {/each}
@@ -449,7 +457,7 @@
     const HISTORY_DETAIL_TIMEOUT_MS = 60 * 1000;
     const HISTORY_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
     const DETAIL_CONCURRENCY = 6;
-    const MAX_HISTORICAL_PATHS = 3;
+    const MAX_HISTORICAL_PATHS = 5;
     const MAX_RETAINED_HISTORICAL_PATHS = 6;
 
     let statusText = '点击上方按钮发起中央气象台实时联网请求...';
@@ -1022,8 +1030,11 @@
         }
     }
 
-    function isHistoricalPathSelected(pathId: string): boolean {
-        return historicalPaths.some(path => path.item.id === pathId);
+    function isHistoricalPathSelected(
+        pathId: string,
+        paths: HistoricalPathState[],
+    ): boolean {
+        return paths.some(path => path.item.id === pathId);
     }
 
     function getVisibleStoppedPathCount(): number {
@@ -1032,11 +1043,17 @@
         ).length;
     }
 
-    function canShowHistoricalPath(pathId: string): boolean {
-        const historicalPath = historicalPaths.find(path => path.item.id === pathId);
+    function canShowHistoricalPath(
+        pathId: string,
+        paths: HistoricalPathState[],
+    ): boolean {
+        const historicalPath = paths.find(path => path.item.id === pathId);
+        const visibleStoppedPathCount = paths.filter(
+            path => path.source === 'history' && path.visible,
+        ).length;
         return (
             historicalPath?.visible === true ||
-            getVisibleStoppedPathCount() < MAX_HISTORICAL_PATHS
+            visibleStoppedPathCount < MAX_HISTORICAL_PATHS
         );
     }
 
@@ -1123,19 +1140,23 @@
         historicalPaths = [...historicalPaths];
     }
 
-    function getHistoricalResultAction(item: RecentHistoricalTyphoon) {
-        if (historyDetailLoadingId === item.id) {
+    function getHistoricalResultAction(
+        item: RecentHistoricalTyphoon,
+        paths: HistoricalPathState[],
+        loadingPathId: string | null,
+    ) {
+        if (loadingPathId === item.id) {
             return '加载中…';
         }
 
-        const selectedPath = historicalPaths.find(path => path.item.id === item.id);
+        const selectedPath = paths.find(path => path.item.id === item.id);
         if (selectedPath) {
             if (selectedPath.visible) {
                 return '查看列表';
             }
-            return canShowHistoricalPath(item.id) ? '重新显示' : '已达上限';
+            return canShowHistoricalPath(item.id, paths) ? '重新显示' : '已达上限';
         }
-        return canShowHistoricalPath(item.id) ? '显示路径' : '已达上限';
+        return canShowHistoricalPath(item.id, paths) ? '显示路径' : '已达上限';
     }
 
     function showHistoricalTyphoon(item: RecentHistoricalTyphoon) {
