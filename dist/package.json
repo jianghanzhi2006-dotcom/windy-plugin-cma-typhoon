@@ -1,6 +1,6 @@
 {
     "name": "windy-plugin-cma-typhoon",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Windy plugin for CMA typhoon tracks using the GB/T 28591-2012 wind scale and a labeled extended Level 18",
     "main": "dist/plugin.min.js",
     "type": "module",
