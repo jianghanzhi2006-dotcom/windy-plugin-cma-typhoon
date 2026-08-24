@@ -9,8 +9,8 @@ const __pluginConfig =  {
   "desktopUI": "rhpane",
   "mobileUI": "fullscreen",
   "private": false,
-  "built": 1786842040907,
-  "builtReadable": "2026-08-16T01:00:40.907Z",
+  "built": 1787531518208,
+  "builtReadable": "2026-08-24T00:31:58.208Z",
   "screenshot": "screenshot.jpg"
 };
 
@@ -3879,16 +3879,14 @@ function instance($$self, $$props, $$invalidate) {
 				autoPan: renderMode !== 'history'
 			};
 
-			const hitArea = renderMode === 'live'
-			? window.L.circleMarker([lat, lng], {
-					radius: 18,
-					stroke: false,
-					fill: true,
-					fillColor: '#ffffff',
-					fillOpacity: 0.001,
-					interactive: true
-				}).addTo(targetLayerGroup)
-			: null;
+			const hitArea = window.L.circleMarker([lat, lng], {
+				radius: 18,
+				stroke: false,
+				fill: true,
+				fillColor: '#ffffff',
+				fillOpacity: 0.001,
+				interactive: true
+			}).addTo(targetLayerGroup);
 
 			const marker = window.L.circleMarker([lat, lng], {
 				radius: 4,
@@ -3899,7 +3897,7 @@ function instance($$self, $$props, $$invalidate) {
 				interactive: true
 			}).addTo(targetLayerGroup);
 
-			hitArea?.bindPopup(popupHtml, popupOptions);
+			hitArea.bindPopup(popupHtml, popupOptions);
 			marker.bindPopup(popupHtml, popupOptions);
 
 			realPointsList.push({
@@ -3914,13 +3912,18 @@ function instance($$self, $$props, $$invalidate) {
 				speedDisplay,
 				bft,
 				isForecast: false,
-				markerInstance: hitArea ?? marker
+				markerInstance: hitArea
 			});
 		}
 
 		for (let i = 0; i < realSegments.length - 1; i++) {
 			const segColor = realSegments[i].color;
-			window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], { color: segColor, weight: 2.5 }).addTo(targetLayerGroup);
+
+			window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], {
+				color: segColor,
+				weight: 2.5,
+				interactive: false
+			}).addTo(targetLayerGroup);
 		}
 
 		if (shouldRenderForecast(tfStatus) && points.length > 0) {

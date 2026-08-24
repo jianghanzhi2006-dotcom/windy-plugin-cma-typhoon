@@ -1305,17 +1305,14 @@
                 autoPan: renderMode !== 'history',
             };
 
-            const hitArea =
-                renderMode === 'live'
-                    ? window.L.circleMarker([lat, lng], {
-                          radius: 18,
-                          stroke: false,
-                          fill: true,
-                          fillColor: '#ffffff',
-                          fillOpacity: 0.001,
-                          interactive: true,
-                      }).addTo(targetLayerGroup)
-                    : null;
+            const hitArea = window.L.circleMarker([lat, lng], {
+                radius: 18,
+                stroke: false,
+                fill: true,
+                fillColor: '#ffffff',
+                fillOpacity: 0.001,
+                interactive: true,
+            }).addTo(targetLayerGroup);
 
             const marker = window.L.circleMarker([lat, lng], {
                 radius: 4,
@@ -1326,7 +1323,7 @@
                 interactive: true,
             }).addTo(targetLayerGroup);
 
-            hitArea?.bindPopup(popupHtml, popupOptions);
+            hitArea.bindPopup(popupHtml, popupOptions);
             marker.bindPopup(popupHtml, popupOptions);
 
             realPointsList.push({
@@ -1341,7 +1338,7 @@
                 speedDisplay,
                 bft,
                 isForecast: false,
-                markerInstance: hitArea ?? marker,
+                markerInstance: hitArea,
             });
         }
 
@@ -1351,6 +1348,7 @@
             window.L.polyline([realSegments[i].latlng, realSegments[i + 1].latlng], {
                 color: segColor,
                 weight: 2.5,
+                interactive: false,
             }).addTo(targetLayerGroup);
         }
 
